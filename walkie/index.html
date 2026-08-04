@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Optical Walkie-Talkie</title>
+<style>
+  :root{--bg:#0a0a0c;--card:#161618;--border:#2a2a2d;--text:#e8e8ea;--dim:#8a8a90;--green:#2fbf71;--gold:#EF9F27;--red:#E24B4A;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{background:var(--bg);color:var(--text);font:14px/1.35 -apple-system,system-ui,sans-serif;display:flex;flex-direction:column;padding:8px;gap:8px;}
+  .bar{display:flex;gap:8px;align-items:center;}
+  .bar input{flex:1;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;}
+  .status{font-size:11px;color:var(--dim);min-height:14px;}
+  .top{display:flex;gap:8px;}
+  .log{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px;overflow-y:auto;max-height:24vh;min-height:64px;}
+  .log .peer{background:#12241a;border:1px solid #1e3a2a;border-radius:8px;padding:6px 8px;margin-bottom:5px;white-space:pre-wrap;word-break:break-word;}
+  .log .me{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:5px;white-space:pre-wrap;word-break:break-word;opacity:.75;}
+  .log .who{font-size:9px;letter-spacing:.05em;color:var(--dim);text-transform:uppercase;margin-bottom:2px;}
+  video{width:88px;height:120px;object-fit:cover;border-radius:8px;background:#000;border:1px solid var(--border);}
+  .compose{display:flex;gap:8px;}
+  .compose input{flex:1;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:11px;font-size:15px;}
+  .tx{border:0;border-radius:10px;background:var(--green);color:#052012;font-weight:800;font-size:15px;padding:0 16px;}
+  .tx:active{transform:scale(.97);}
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px;min-height:40vh;}
+  #bb{image-rendering:pixelated;width:min(82vw,440px);height:min(82vw,440px);background:#fff;border-radius:8px;}
+  #bb.idle{display:none;}
+  .idlemsg{color:var(--dim);text-align:center;font-size:13px;padding:24px;}
+  .caption{font-size:11px;color:var(--dim);margin-top:8px;text-align:center;max-width:90%;word-break:break-word;}
+  .caption b{color:var(--gold);}
+  canvas.work{display:none;}
+</style>
+</head>
+<body>
+  <div class="bar">
+    <input id="key" value="lab" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="shared key (both must match)" />
+    <button id="camBtn" class="tx" style="background:var(--gold);color:#111">Camera</button>
+  </div>
+  <div class="status" id="status">Enter a shared key, start the camera, and point it at the other phone's code.</div>
+
+  <div class="top">
+    <div class="log" id="log"></div>
+    <video id="video" playsinline muted></video>
+  </div>
+
+  <div class="compose">
+    <input id="msg" placeholder="Type a message…" />
+    <button id="txBtn" class="tx">TRANSMIT ▶</button>
+  </div>
+
+  <div class="stage">
+    <div class="idlemsg" id="idle">Nothing broadcasting.<br />Type a message and hit <b style="color:var(--green)">TRANSMIT</b> — your screen becomes the code the other camera reads.</div>
+    <canvas id="bb" class="idle" width="460" height="460"></canvas>
+    <div class="caption" id="caption"></div>
+  </div>
+
+  <canvas id="work" class="work"></canvas>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
