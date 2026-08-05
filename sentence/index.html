@@ -28,9 +28,9 @@
   .meter{display:flex;align-items:center;gap:8px;}
   .dot{width:12px;height:12px;border-radius:50%;background:#333;transition:background .1s,box-shadow .1s;}
   .dot.hit{background:var(--green);box-shadow:0 0 10px var(--green);}
-  .words{font:600 20px/1.7 ui-monospace,monospace;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;min-height:70px;word-break:break-word;}
-  .w{color:var(--text);}
-  .blank{color:var(--dim);letter-spacing:1px;}
+  .words{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;background:#0a0a0c;border:1px solid var(--border);border-radius:10px;padding:12px;min-height:64px;}
+  .wc{image-rendering:pixelated;border-radius:3px;background:#0a0a0c;}
+  .now{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px;}
   .status{font-size:12px;color:var(--dim);min-height:16px;}
   .result{font-size:19px;font-weight:800;text-align:center;padding:8px;}
   .win{color:var(--green);} .lose{color:var(--red);}
@@ -41,7 +41,7 @@
 <body>
   <div>
     <h1>Guess the Phrase</h1>
-    <p class="sub">The beacon scatters a phrase word by word. Catch what you can before the timer runs out, then guess the whole thing. Fewer words needed = more points.</p>
+    <p class="sub">The beacon reveals the phrase one word-picture at a time. Grab as much of each word as you can before it moves to the next — then read the pixels and guess.</p>
   </div>
 
   <div class="roles">
@@ -61,8 +61,8 @@
   <!-- PLAYER -->
   <div id="playerCard" class="card hide">
     <div class="timerRow">
-      <div class="timer" id="timer">0:20</div>
-      <div class="meter"><div class="dot" id="dot"></div><span id="count" class="sub">0 / ? words</span></div>
+      <div class="timer" id="timer">0:45</div>
+      <div class="meter"><div class="dot" id="dot"></div><span id="count" class="sub">0% revealed</span></div>
     </div>
     <div class="words" id="words" style="margin-top:8px">Start scanning and aim at the beacon.</div>
     <div class="status" id="plStat" style="margin-top:6px"></div>

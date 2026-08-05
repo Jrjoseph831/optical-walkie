@@ -1,10 +1,14 @@
-// Guess the Phrase — single-beacon "sentence" mode.
+// Guess the Phrase — word-picture reveal mode.
 //
-// BEACON: scatters a phrase word by word — each word is a tiny fountain-QR
-// fragment, cycling (plus a meta fragment with word count + answer hash).
-// PLAYER: hidden camera; caught words drop into their positions, the rest stay
-// blank. A countdown enforces incompleteness — catch what you can, then guess
-// the whole phrase (verified on-device). Fewer words needed = more points.
+// BEACON: renders each word as a black-on-white image, tiles it, and reveals the
+// phrase ONE WORD-PICTURE AT A TIME — broadcasting the current word's tiles for a
+// window, then moving to the next word; after the last word it loops and repeats
+// until stopped. (Plus a meta fragment with word count, tile grid, answer hash.)
+//
+// PLAYER: hidden camera; caught tiles fill in each word-picture (unrevealed tiles
+// stay gray). You grab as much of each word as you can before the beacon moves on,
+// read the half-formed pixels, and guess the phrase (verified on-device). Fewer
+// pixels needed + more time left = more points.
 import QRCode from "qrcode";
 import { prepareZXingModule, readBarcodes } from "zxing-wasm/reader";
 import wasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
@@ -20,25 +24,26 @@ prepareZXingModule({
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const MARGIN = 4;
-const TX_FPS = 12;
+const TX_FPS = 16;
 const SCAN_MS = 70;
 const META_EVERY = 12;
-const ROUND_SECONDS = 20;
+const WORD_WINDOW_MS = 4000; // how long each word-picture broadcasts before moving on
+const ROUND_SECONDS = 45;
+const GW = 22; // tiles wide per word
+const GH = 6; // tiles tall per word
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 const PHRASES: string[] = [
-  "the quick brown fox jumps over the lazy dog",
   "may the force be with you",
-  "to be or not to be that is the question",
-  "a picture is worth a thousand words",
-  "the early bird catches the worm",
+  "to be or not to be",
+  "practice makes perfect",
+  "the early bird gets the worm",
   "actions speak louder than words",
-  "when in rome do as the romans do",
   "houston we have a problem",
-  "with great power comes great responsibility",
-  "an apple a day keeps the doctor away",
+  "a picture is worth a thousand words",
+  "when in rome do as the romans",
 ];
 
 function normalize(s: string): string {
@@ -47,6 +52,37 @@ function normalize(s: string): string {
 async function sha256hex(s: string): Promise<string> {
   const b = await crypto.subtle.digest("SHA-256", enc.encode(normalize(s)));
   return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+// Render a word as black-on-white and downsample to a GW×GH bit grid (1 = ink).
+function wordToTiles(word: string): Uint8Array {
+  const scale = 10;
+  const c = document.createElement("canvas");
+  c.width = GW * scale;
+  c.height = GH * scale;
+  const cx = c.getContext("2d")!;
+  cx.fillStyle = "#ffffff";
+  cx.fillRect(0, 0, c.width, c.height);
+  cx.fillStyle = "#000000";
+  cx.textAlign = "center";
+  cx.textBaseline = "middle";
+  let fs = GH * scale * 0.95;
+  cx.font = `bold ${fs}px Arial, sans-serif`;
+  while (cx.measureText(word).width > c.width * 0.94 && fs > 6) {
+    fs -= 2;
+    cx.font = `bold ${fs}px Arial, sans-serif`;
+  }
+  cx.fillText(word, c.width / 2, c.height / 2 + scale * 0.5);
+  const small = document.createElement("canvas");
+  small.width = GW;
+  small.height = GH;
+  const sx = small.getContext("2d")!;
+  sx.imageSmoothingEnabled = true;
+  sx.drawImage(c, 0, 0, GW, GH);
+  const d = sx.getImageData(0, 0, GW, GH).data;
+  const bits = new Uint8Array(GW * GH);
+  for (let i = 0; i < GW * GH; i++) bits[i] = d[i * 4]! < 128 ? 1 : 0;
+  return bits;
 }
 
 // ---------- roles ----------
@@ -74,20 +110,12 @@ PHRASES.forEach((_, i) => {
 });
 puzzleSel.value = "random";
 
-// ---------- shared QR frame builder ----------
 function frameForPayload(s: string): Uint8Array {
   const payload = enc.encode(s);
   const sessionId = (Math.random() * 0x10000) | 0;
-  const blockLen = Math.max(1, payload.length); // one block → always k=1
+  const blockLen = Math.max(1, payload.length);
   const e = new LTEncoder(payload, blockLen, sessionId);
-  const base: FrameHeader = {
-    sessionId,
-    seq: 0,
-    k: e.k,
-    blockLen,
-    totalLen: payload.length,
-    payloadFnv: fnv1a(payload),
-  };
+  const base: FrameHeader = { sessionId, seq: 0, k: e.k, blockLen, totalLen: payload.length, payloadFnv: fnv1a(payload) };
   return packFrame({ ...base, seq: 0 }, e.encode(0));
 }
 
@@ -97,11 +125,10 @@ const bbCtx = bb.getContext("2d")!;
 const modC = document.createElement("canvas");
 const modCtx = modC.getContext("2d")!;
 let txTimer: number | null = null;
+let windowTimer: number | null = null;
 
 function renderFrame(frame: Uint8Array): void {
-  const qr = QRCode.create([{ data: frame, mode: "byte" } as unknown as QRCode.QRCodeSegment], {
-    errorCorrectionLevel: "L",
-  });
+  const qr = QRCode.create([{ data: frame, mode: "byte" } as unknown as QRCode.QRCodeSegment], { errorCorrectionLevel: "L" });
   const raster = rasterizeQr(qr.modules.size, qr.modules.data, MARGIN);
   const img = new ImageData(new Uint8ClampedArray(raster.pixels.buffer), raster.size, raster.size);
   modC.width = raster.size;
@@ -117,23 +144,34 @@ async function startBeacon(): Promise<void> {
   const phrase = PHRASES[idx]!;
   const words = phrase.split(/\s+/);
   const hash = await sha256hex(phrase);
-  const metaFrame = frameForPayload(`M|${words.length}|${hash}`);
-  const wordFrames = words.map((w, i) => frameForPayload(`W|${i}|${w}`));
+  const metaFrame = frameForPayload(`M|${words.length}|${GW}|${GH}|${hash}`);
+  const wordFrames = words.map((w, wi) => {
+    const bits = wordToTiles(w);
+    return Array.from(bits, (bit, ti) => frameForPayload(`T|${wi}|${ti}|${bit}`));
+  });
 
   if (txTimer !== null) clearInterval(txTimer);
-  let wi = 0;
+  if (windowTimer !== null) clearInterval(windowTimer);
+  let cur = 0;
+  let ptr = 0;
   let tick = 0;
   txTimer = window.setInterval(() => {
     if (tick % META_EVERY === 0) {
       renderFrame(metaFrame);
     } else {
-      renderFrame(wordFrames[wi]!);
-      wi = (wi + 1) % wordFrames.length;
+      const frames = wordFrames[cur]!;
+      renderFrame(frames[ptr]!);
+      ptr = (ptr + 1) % frames.length;
     }
     tick++;
   }, 1000 / TX_FPS);
+  $("bcnStat").textContent = `Broadcasting word 1 / ${words.length} — looping`;
+  windowTimer = window.setInterval(() => {
+    cur = (cur + 1) % words.length; // loop through words, then repeat
+    ptr = 0;
+    $("bcnStat").textContent = `Broadcasting word ${cur + 1} / ${words.length} — looping`;
+  }, WORD_WINDOW_MS);
 
-  $("bcnStat").textContent = `Broadcasting a ${words.length}-word phrase — looping`;
   const b = $<HTMLButtonElement>("bcnBtn");
   b.textContent = "Stop";
   b.classList.add("stop");
@@ -142,7 +180,8 @@ async function startBeacon(): Promise<void> {
 }
 function stopBeacon(): void {
   if (txTimer !== null) clearInterval(txTimer);
-  txTimer = null;
+  if (windowTimer !== null) clearInterval(windowTimer);
+  txTimer = windowTimer = null;
   const b = $<HTMLButtonElement>("bcnBtn");
   b.textContent = "Start broadcasting";
   b.classList.remove("stop");
@@ -159,14 +198,16 @@ let scanning = false;
 let inFlight = false;
 let lastScan = 0;
 let solved = false;
-let ended = false;
 let audio: AudioContext | null = null;
 
 let wordCount = 0;
 let answerHash: string | null = null;
-const caught = new Map<number, string>();
+let known: Uint8Array[] = []; // per word: 0=white,1=black,2=unknown
+let knownCount = 0;
+const wordCanvas: HTMLCanvasElement[] = [];
 const doneStreams = new Set<string>();
 const decoders = new Map<string, LTDecoder>();
+const pending: [number, number, number][] = []; // tiles seen before meta
 let timeLeft = ROUND_SECONDS;
 let countdown: number | null = null;
 
@@ -177,38 +218,57 @@ function tickFx(): void {
     const g = audio.createGain();
     o.frequency.value = 880;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.06, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.05, t + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
     o.connect(g);
     g.connect(audio.destination);
     o.start(t);
     o.stop(t + 0.06);
   }
-  navigator.vibrate?.(12);
+  navigator.vibrate?.(8);
   const d = $("dot");
   d.classList.add("hit");
-  setTimeout(() => d.classList.remove("hit"), 90);
+  setTimeout(() => d.classList.remove("hit"), 80);
 }
 
-function renderWords(): void {
+function buildWordCanvases(): void {
   const wrap = $("words");
-  if (wordCount === 0) {
-    wrap.textContent = "Locking onto the beacon…";
-    return;
-  }
   wrap.innerHTML = "";
-  for (let i = 0; i < wordCount; i++) {
-    const span = document.createElement("span");
-    if (caught.has(i)) {
-      span.className = "w";
-      span.textContent = caught.get(i)! + " ";
-    } else {
-      span.className = "blank";
-      span.textContent = "____ ";
-    }
-    wrap.appendChild(span);
+  wordCanvas.length = 0;
+  for (let w = 0; w < wordCount; w++) {
+    const c = document.createElement("canvas");
+    c.width = GW;
+    c.height = GH;
+    c.className = "wc";
+    c.style.height = "44px";
+    c.style.width = 44 * (GW / GH) + "px";
+    wrap.appendChild(c);
+    wordCanvas.push(c);
+    drawWord(w);
   }
-  $("count").textContent = `${caught.size} / ${wordCount} words`;
+}
+function drawWord(w: number): void {
+  const c = wordCanvas[w];
+  if (!c) return;
+  const ctx = c.getContext("2d")!;
+  const arr = known[w]!;
+  for (let i = 0; i < GW * GH; i++) {
+    const v = arr[i]!;
+    ctx.fillStyle = v === 2 ? "#2a2a2d" : v === 1 ? "#000000" : "#ffffff";
+    ctx.fillRect(i % GW, Math.floor(i / GW), 1, 1);
+  }
+}
+function setTile(w: number, i: number, bit: number): void {
+  if (w < 0 || w >= wordCount || i < 0 || i >= GW * GH) return;
+  const arr = known[w]!;
+  if (arr[i] !== 2) return;
+  arr[i] = bit;
+  knownCount++;
+  drawWord(w);
+  for (const [wi, el] of wordCanvas.entries()) el.classList.toggle("now", wi === w);
+  const total = wordCount * GW * GH;
+  $("count").textContent = `${Math.round((knownCount / total) * 100)}% revealed`;
+  tickFx();
 }
 
 function fmtTime(s: number): string {
@@ -226,7 +286,6 @@ function startTimer(): void {
   }, 1000);
 }
 function endRound(): void {
-  ended = true;
   if (countdown !== null) clearInterval(countdown);
   countdown = null;
   scanning = false;
@@ -249,12 +308,12 @@ async function startCam(): Promise<void> {
     video.srcObject = stream;
     await video.play();
     scanning = true;
-    ended = false;
     $<HTMLButtonElement>("camBtn").textContent = "Stop scanning";
     $<HTMLButtonElement>("camBtn").classList.add("stop");
     $<HTMLButtonElement>("camBtn").dataset.on = "1";
     $("answerWrap").classList.remove("hide");
-    $("plStat").textContent = "Aim at the beacon — catch words fast!";
+    $("plStat").textContent = "Aim at the beacon — grab each word before it moves on!";
+    if (wordCount === 0) $("words").textContent = "Locking onto the beacon…";
     startTimer();
     requestAnimationFrame(scan);
   } catch (e) {
@@ -322,17 +381,25 @@ function handleFragment(str: string): void {
     const wc = Number(p[1]);
     if (!answerHash && !Number.isNaN(wc)) {
       wordCount = wc;
-      answerHash = p[2]!;
-      renderWords();
+      answerHash = p[4]!;
+      known = Array.from({ length: wordCount }, () => new Uint8Array(GW * GH).fill(2));
+      knownCount = 0;
+      buildWordCanvases();
+      for (const [w, i, bit] of pending) setTile(w, i, bit);
+      pending.length = 0;
     }
     return;
   }
-  if (p[0] === "W") {
-    const idx = Number(p[1]);
-    if (Number.isNaN(idx) || caught.has(idx)) return;
-    caught.set(idx, p.slice(2).join("|"));
-    renderWords();
-    tickFx();
+  if (p[0] === "T") {
+    const w = Number(p[1]);
+    const i = Number(p[2]);
+    const bit = Number(p[3]);
+    if (Number.isNaN(w) || Number.isNaN(i)) return;
+    if (!answerHash) {
+      pending.push([w, i, bit]);
+      return;
+    }
+    setTile(w, i, bit);
   }
 }
 
@@ -347,9 +414,10 @@ $<HTMLButtonElement>("guessBtn").onclick = async () => {
   const h = await sha256hex(guess);
   if (h === answerHash) {
     solved = true;
-    const frac = wordCount ? caught.size / wordCount : 1;
+    const total = wordCount * GW * GH;
+    const frac = total ? knownCount / total : 1;
     const score = Math.max(50, Math.round((1 - frac) * 800 + timeLeft * 10));
-    $("result").innerHTML = `<span class="win">🎉 Correct! Guessed with ${caught.size}/${wordCount} words, ${timeLeft}s left → ${score} pts</span>`;
+    $("result").innerHTML = `<span class="win">🎉 Correct! ${Math.round(frac * 100)}% revealed, ${timeLeft}s left → ${score} pts</span>`;
     $("answerWrap").classList.add("hide");
     endRound();
   } else {
@@ -358,24 +426,27 @@ $<HTMLButtonElement>("guessBtn").onclick = async () => {
 };
 
 function resetGame(): void {
-  caught.clear();
   doneStreams.clear();
   decoders.clear();
+  pending.length = 0;
   solved = false;
-  ended = false;
   answerHash = null;
   wordCount = 0;
+  known = [];
+  knownCount = 0;
+  wordCanvas.length = 0;
   if (countdown !== null) clearInterval(countdown);
   countdown = null;
   timeLeft = ROUND_SECONDS;
   $("timer").textContent = fmtTime(timeLeft);
   $("timer").classList.remove("low");
-  $("count").textContent = "0 / ? words";
+  $("count").textContent = "0% revealed";
   $("result").innerHTML = "";
   $<HTMLInputElement>("guess").value = "";
-  $("words").textContent = "Start scanning and aim at the beacon.";
+  $("words").textContent = scanning ? "Locking onto the beacon…" : "Start scanning and aim at the beacon.";
   $("answerWrap").classList.toggle("hide", !scanning);
   $("plStat").textContent = "";
+  if (scanning) startTimer();
 }
 $<HTMLButtonElement>("newBtn").onclick = resetGame;
 
