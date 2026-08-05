@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Fragments — Optical Clue Hunt</title>
+<style>
+  :root{--bg:#0a0a0c;--card:#161618;--border:#2a2a2d;--text:#e8e8ea;--dim:#8a8a90;--green:#2fbf71;--gold:#EF9F27;--red:#E24B4A;--blue:#4a9de2;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;min-height:100%;}
+  body{background:var(--bg);color:var(--text);font:14px/1.4 -apple-system,system-ui,sans-serif;padding:10px;display:flex;flex-direction:column;gap:10px;}
+  h1{font-size:16px;margin:0;}
+  .sub{font-size:11px;color:var(--dim);margin:0;}
+  .roles{display:flex;gap:8px;}
+  .roles button{flex:1;padding:14px;font-size:16px;font-weight:700;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);}
+  .roles button.active{background:var(--gold);color:#111;border-color:var(--gold);}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;}
+  label{display:block;font-size:11px;color:var(--dim);margin-bottom:4px;}
+  select,input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:15px;}
+  .btn{width:100%;padding:14px;font-size:16px;font-weight:800;border-radius:12px;border:0;background:var(--green);color:#052012;margin-top:10px;}
+  .btn.alt{background:var(--gold);color:#111;}
+  .btn.stop{background:var(--red);color:#fff;}
+  .hide{display:none;}
+  video{width:120px;height:150px;object-fit:cover;border-radius:10px;background:#000;border:1px solid var(--border);}
+  .row{display:flex;gap:10px;align-items:flex-start;}
+  #bb{image-rendering:pixelated;width:min(82vw,420px);height:min(82vw,420px);background:#fff;border-radius:8px;display:block;margin:10px auto 0;}
+  .status{font-size:12px;color:var(--dim);min-height:16px;}
+  .prog{font-size:22px;font-weight:800;}
+  .clues{margin-top:8px;display:flex;flex-direction:column;gap:6px;}
+  .clue{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;}
+  .clue .n{color:var(--gold);font-weight:700;margin-right:6px;}
+  .slot{background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--dim);}
+  .result{font-size:20px;font-weight:800;text-align:center;padding:10px;}
+  .win{color:var(--green);} .lose{color:var(--red);}
+  canvas.work{display:none;}
+</style>
+</head>
+<body>
+  <div>
+    <h1>Fragments</h1>
+    <p class="sub">One beacon broadcasts the clues as codes. Scan to collect them all, then guess the answer. No network — your phone checks the answer itself.</p>
+  </div>
+
+  <div class="roles">
+    <button id="roleBeacon">📡 Beacon</button>
+    <button id="rolePlayer">🔍 Player</button>
+  </div>
+
+  <!-- BEACON -->
+  <div id="beaconCard" class="card hide">
+    <label>Puzzle</label>
+    <select id="puzzle"></select>
+    <button id="bcnBtn" class="btn alt">Start broadcasting</button>
+    <canvas id="bb" width="440" height="440"></canvas>
+    <div class="status" id="bcnStat" style="margin-top:8px;text-align:center"></div>
+  </div>
+
+  <!-- PLAYER -->
+  <div id="playerCard" class="card hide">
+    <div class="row">
+      <div style="flex:1">
+        <div class="prog" id="prog">0 / ? clues</div>
+        <div class="status" id="plStat">Start the camera and point it at the beacon.</div>
+      </div>
+      <video id="video" playsinline muted></video>
+    </div>
+    <button id="camBtn" class="btn">Start camera</button>
+    <div class="clues" id="clues"></div>
+    <div id="answerWrap" class="hide" style="margin-top:12px">
+      <label>You've got all the clues — what's the answer?</label>
+      <input id="guess" placeholder="Type your guess…" autocapitalize="off" autocorrect="off" />
+      <button id="guessBtn" class="btn">Guess</button>
+    </div>
+    <div id="result" class="result"></div>
+  </div>
+
+  <canvas id="work" class="work"></canvas>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
