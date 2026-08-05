@@ -20,7 +20,6 @@ import { rewriteStandaloneLinks } from "./build/rewrite-standalone-links";
 import { standaloneCsp } from "./build/standalone-csp";
 import { emitAs } from "./build/emit-as";
 import { rootPwaHead } from "./build/root-pwa-head";
-import { licenseBanner } from "./build/license-banner";
 
 // Where the site is published, used only to make the social-card URLs absolute
 // — scrapers are inconsistent about resolving relative ones. Override with
@@ -99,7 +98,6 @@ export default defineConfig(({ mode }) => {
         rewriteStandaloneLinks(page),
         standaloneCsp(page),
         viteSingleFile(),
-        licenseBanner(pkg.version),
         emitAs(outDir, `${page}/index.html`, `decimen-${page === "send" ? "sender" : "receiver"}.html`),
       ],
       // Workers are bundled in their own Rollup pass and do not inherit the
@@ -181,7 +179,6 @@ export default defineConfig(({ mode }) => {
         },
       }),
       rootPwaHead(),
-      licenseBanner(pkg.version),
     ],
     build: {
       rollupOptions: {
