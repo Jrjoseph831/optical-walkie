@@ -27,10 +27,10 @@ const MARGIN = 4;
 const TX_FPS = 16;
 const SCAN_MS = 70;
 const META_EVERY = 12;
-const WORD_WINDOW_MS = 4000; // how long each word-picture broadcasts before moving on
+const WORD_WINDOW_MS = 3500; // how long each word-picture broadcasts before moving on
 const ROUND_SECONDS = 45;
-const GW = 22; // tiles wide per word
-const GH = 6; // tiles tall per word
+const GW = 30; // tiles wide per word
+const GH = 9; // tiles tall per word (one full row is sent per frame)
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -147,7 +147,13 @@ async function startBeacon(): Promise<void> {
   const metaFrame = frameForPayload(`M|${words.length}|${GW}|${GH}|${hash}`);
   const wordFrames = words.map((w, wi) => {
     const bits = wordToTiles(w);
-    return Array.from(bits, (bit, ti) => frameForPayload(`T|${wi}|${ti}|${bit}`));
+    const rows: Uint8Array[] = [];
+    for (let r = 0; r < GH; r++) {
+      let s = "";
+      for (let x = 0; x < GW; x++) s += bits[r * GW + x] ? "1" : "0";
+      rows.push(frameForPayload(`R|${wi}|${r}|${s}`)); // whole row per frame
+    }
+    return rows;
   });
 
   if (txTimer !== null) clearInterval(txTimer);
@@ -207,7 +213,7 @@ let knownCount = 0;
 const wordCanvas: HTMLCanvasElement[] = [];
 const doneStreams = new Set<string>();
 const decoders = new Map<string, LTDecoder>();
-const pending: [number, number, number][] = []; // tiles seen before meta
+const pending: [number, number, string][] = []; // rows seen before meta
 let timeLeft = ROUND_SECONDS;
 let countdown: number | null = null;
 
@@ -258,12 +264,19 @@ function drawWord(w: number): void {
     ctx.fillRect(i % GW, Math.floor(i / GW), 1, 1);
   }
 }
-function setTile(w: number, i: number, bit: number): void {
-  if (w < 0 || w >= wordCount || i < 0 || i >= GW * GH) return;
+function setRow(w: number, r: number, bitsStr: string): void {
+  if (w < 0 || w >= wordCount || r < 0 || r >= GH) return;
   const arr = known[w]!;
-  if (arr[i] !== 2) return;
-  arr[i] = bit;
-  knownCount++;
+  let added = 0;
+  for (let x = 0; x < GW && x < bitsStr.length; x++) {
+    const i = r * GW + x;
+    if (arr[i] === 2) {
+      arr[i] = bitsStr.charCodeAt(x) === 49 ? 1 : 0; // '1'
+      added++;
+    }
+  }
+  if (added === 0) return;
+  knownCount += added;
   drawWord(w);
   for (const [wi, el] of wordCanvas.entries()) el.classList.toggle("now", wi === w);
   const total = wordCount * GW * GH;
@@ -385,21 +398,21 @@ function handleFragment(str: string): void {
       known = Array.from({ length: wordCount }, () => new Uint8Array(GW * GH).fill(2));
       knownCount = 0;
       buildWordCanvases();
-      for (const [w, i, bit] of pending) setTile(w, i, bit);
+      for (const [w, r, s] of pending) setRow(w, r, s);
       pending.length = 0;
     }
     return;
   }
-  if (p[0] === "T") {
+  if (p[0] === "R") {
     const w = Number(p[1]);
-    const i = Number(p[2]);
-    const bit = Number(p[3]);
-    if (Number.isNaN(w) || Number.isNaN(i)) return;
+    const r = Number(p[2]);
+    const s = p[3] ?? "";
+    if (Number.isNaN(w) || Number.isNaN(r)) return;
     if (!answerHash) {
-      pending.push([w, i, bit]);
+      pending.push([w, r, s]);
       return;
     }
-    setTile(w, i, bit);
+    setRow(w, r, s);
   }
 }
 
