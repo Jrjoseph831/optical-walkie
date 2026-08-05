@@ -78,7 +78,7 @@ function imageToTiles(emoji: string): number[][] {
   const c = document.createElement("canvas");
   c.width = c.height = 220;
   const cx = c.getContext("2d")!;
-  cx.fillStyle = "#0a0a0c";
+  cx.fillStyle = "#ffffff";
   cx.fillRect(0, 0, 220, 220);
   cx.font = "170px serif";
   cx.textAlign = "center";
@@ -100,12 +100,15 @@ function imageToTiles(emoji: string): number[][] {
 function frameForPayload(s: string): Uint8Array {
   const payload = enc.encode(s);
   const sessionId = (Math.random() * 0x10000) | 0;
-  const e = new LTEncoder(payload, BLOCK_LEN, sessionId);
+  // One block per fragment → always k=1 → decodes from a single frame. (Meta
+  // used to exceed BLOCK_LEN and need 2 frames, which the beacon never sent.)
+  const blockLen = Math.max(1, payload.length);
+  const e = new LTEncoder(payload, blockLen, sessionId);
   const base: FrameHeader = {
     sessionId,
     seq: 0,
     k: e.k,
-    blockLen: BLOCK_LEN,
+    blockLen,
     totalLen: payload.length,
     payloadFnv: fnv1a(payload),
   };
@@ -288,15 +291,20 @@ function onFrame(bytes: Uint8Array): void {
 function handleFragment(str: string): void {
   const p = str.split("|");
   if (p[0] === "M") {
-    const w = Number(p[1]);
-    const h = Number(p[2]);
-    if (!answerHash && !Number.isNaN(w) && !Number.isNaN(h)) {
-      gridW = w;
-      gridH = h;
-      answerHash = p[3]!;
-      initReveal();
-      // paint any tiles caught before meta arrived
-      for (const [idx, rgb] of tilePix) drawTile(idx, rgb);
+    if (!answerHash) {
+      const w = Number(p[1]);
+      const h = Number(p[2]);
+      if (!Number.isNaN(w) && !Number.isNaN(h)) {
+        answerHash = p[3]!;
+        // Only re-init if the grid actually differs (tiles are already drawing).
+        if (w !== gridW || h !== gridH) {
+          gridW = w;
+          gridH = h;
+          initReveal();
+          for (const [idx, rgb] of tilePix) drawTile(idx, rgb);
+        }
+        $("plStat").textContent = "Locked on — keep filling, guess when ready.";
+      }
     }
     return;
   }
@@ -306,7 +314,7 @@ function handleFragment(str: string): void {
     const rgb = [Number(p[2]), Number(p[3]), Number(p[4])];
     if (tilePix.size === 0) startTime = performance.now();
     tilePix.set(idx, rgb);
-    if (answerHash) drawTile(idx, rgb);
+    drawTile(idx, rgb); // draw immediately — never gate rendering on the meta
     tick();
     updateProgress();
   }
