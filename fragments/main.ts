@@ -357,6 +357,24 @@ $<HTMLButtonElement>("guessBtn").onclick = async () => {
   }
 };
 
+function resetGame(): void {
+  tilePix.clear();
+  doneStreams.clear();
+  decoders.clear();
+  solved = false;
+  startTime = 0;
+  answerHash = null;
+  gridW = GRID;
+  gridH = GRID;
+  initReveal();
+  updateProgress();
+  $("result").innerHTML = "";
+  $<HTMLInputElement>("guess").value = "";
+  $("answerWrap").classList.toggle("hide", !scanning);
+  $("plStat").textContent = scanning ? "New game — aim at the beacon." : "Start scanning and aim at the beacon.";
+}
+$<HTMLButtonElement>("newBtn").onclick = resetGame;
+
 async function keepAwake(): Promise<void> {
   try {
     await (navigator as unknown as { wakeLock?: { request(t: string): Promise<unknown> } }).wakeLock?.request("screen");
