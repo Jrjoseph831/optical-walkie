@@ -89,6 +89,8 @@ function addScore(room: string, pts: number): number {
   return total;
 }
 
+// Letters and spaces only — the pixel font has no glyphs for punctuation or
+// digits, and startBeacon renders each word straight from this string.
 const PHRASES: string[] = [
   "may the force be with you",
   "to be or not to be",
@@ -98,6 +100,28 @@ const PHRASES: string[] = [
   "houston we have a problem",
   "a picture is worth a thousand words",
   "when in rome do as the romans",
+  "better late than never",
+  "break a leg",
+  "bite the bullet",
+  "every cloud has a silver lining",
+  "curiosity killed the cat",
+  "never judge a book by its cover",
+  "good things come to those who wait",
+  "no pain no gain",
+  "once in a blue moon",
+  "slow and steady wins the race",
+  "the show must go on",
+  "time heals all wounds",
+  "birds of a feather flock together",
+  "all that glitters is not gold",
+  "barking up the wrong tree",
+  "to infinity and beyond",
+  "just keep swimming",
+  "there is no place like home",
+  "you shall not pass",
+  "life is like a box of chocolates",
+  "the grass is always greener",
+  "elementary my dear watson",
 ];
 
 function normalize(s: string): string {
