@@ -59,12 +59,17 @@ $("roleBeacon").onclick = () => setRole("beacon");
 $("rolePlayer").onclick = () => setRole("player");
 
 const puzzleSel = $<HTMLSelectElement>("puzzle");
+const randOpt = document.createElement("option");
+randOpt.value = "random";
+randOpt.textContent = "🎲 Random (surprise me)";
+puzzleSel.appendChild(randOpt);
 IMAGES.forEach((p, i) => {
   const o = document.createElement("option");
   o.value = String(i);
   o.textContent = `${p.label} ${p.emoji}`;
   puzzleSel.appendChild(o);
 });
+puzzleSel.value = "random";
 
 // ---------- BEACON ----------
 const bb = $<HTMLCanvasElement>("bb");
@@ -130,7 +135,8 @@ function renderFrame(frame: Uint8Array): void {
 }
 
 async function startBeacon(): Promise<void> {
-  const pick = IMAGES[Number(puzzleSel.value)]!;
+  const idx = puzzleSel.value === "random" ? Math.floor(Math.random() * IMAGES.length) : Number(puzzleSel.value);
+  const pick = IMAGES[idx]!;
   const hash = await sha256hex(pick.answer);
   const tiles = imageToTiles(pick.emoji);
   const metaFrame = frameForPayload(`M|${GRID}|${GRID}|${hash}`);
