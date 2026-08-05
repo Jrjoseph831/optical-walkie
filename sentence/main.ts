@@ -227,6 +227,7 @@ async function startBeacon(forceIdx?: number): Promise<void> {
   }
   const metaFrame = frameForPayload(`M|${words.length}|${GH}|${hash}|${widths.join(",")}|${round}|${choices.join(",")}`);
   const endFrame = frameForPayload(`E|done`);
+  endFrameCache = endFrame;
 
   const rowFrames: Uint8Array[] = [];
   rendered.forEach(({ bits, width }, wi) => {
@@ -258,11 +259,8 @@ async function startBeacon(forceIdx?: number): Promise<void> {
       return;
     }
     if (playIdx >= playlist.length) {
-      renderFrame(endFrame);
       $("bcnStat").textContent = "Broadcast complete.";
-      if (txTimer !== null) clearInterval(txTimer);
-      txTimer = null;
-      onBroadcastDone();
+      finishBroadcast();
       return;
     }
     renderFrame(playlist[playIdx]!);
@@ -292,22 +290,27 @@ const defaultBcnClick = () =>
   $<HTMLButtonElement>("bcnBtn").dataset.on ? stopBeacon() : void startBeacon();
 $<HTMLButtonElement>("bcnBtn").onclick = defaultBcnClick;
 
-// After the one-pass broadcast finishes: let a solo host spin up the next
-// phrase in one tap; a party beacon heads back to the lobby for the standings.
-function onBroadcastDone(): void {
+// The broadcast finished — either all passes played, or (in a party) every
+// player already locked in an answer so we cut it short. Offer the next round.
+let endFrameCache: Uint8Array | null = null;
+function finishBroadcast(): void {
+  if (txTimer !== null) clearInterval(txTimer);
+  txTimer = null;
+  if (endFrameCache) renderFrame(endFrameCache);
   const b = $<HTMLButtonElement>("bcnBtn");
   b.classList.remove("stop");
   b.dataset.on = "";
   if (partyRoom) {
-    b.textContent = "‹ Back to lobby";
+    b.textContent = "▶  Next round";
     b.onclick = () => {
-      location.href = `../party/?room=${partyRoom}`;
+      b.onclick = defaultBcnClick;
+      startNextRound();
     };
   } else {
     b.textContent = "▶  Beam another phrase";
     b.onclick = () => {
       b.onclick = defaultBcnClick;
-      void autoBeacon(); // countdown again so players can tap "Play again" and re-aim
+      void autoBeacon(); // countdown again so players can re-aim
     };
   }
 }
@@ -324,6 +327,71 @@ function drawCountdown(n: number): void {
 }
 
 let bcnGen = 0; // bumped by any manual start/stop to cancel a pending countdown
+
+// ---------- party coordination (realtime, party mode only) ----------
+// The room channel is loaded lazily so solo players never download the
+// realtime client. Beacons count how many players have answered (presence
+// tells us how many players there are); when all are in, the broadcast ends
+// early and the host is offered the next round.
+let partyCh: { send: (a: unknown) => unknown } | null = null;
+let partyReportAnswer: () => void = () => {};
+
+function startNextRound(): void {
+  const seed = Math.floor(Math.random() * 1e9);
+  // Broadcast so every beacon (twins included) beams the same fresh phrase and
+  // players reset in lockstep; with broadcast self:true we react to it too.
+  if (partyCh) void partyCh.send({ type: "broadcast", event: "next", payload: { seed } });
+  else void autoBeacon();
+}
+
+async function setupParty(): Promise<void> {
+  if (!partyRoom) return;
+  try {
+    const [{ supabase }, { myId }] = await Promise.all([
+      import("../shared/supabase"),
+      import("../shared/profile"),
+    ]);
+    const id = myId();
+    const isBeacon = partyRole === "beacon";
+    const ch = supabase.channel(`room:${partyRoom}`, {
+      config: { presence: { key: id }, broadcast: { self: true } },
+    });
+    partyCh = ch;
+    const answeredIds = new Set<string>();
+    let playerCount = 0;
+    const check = (): void => {
+      if (isBeacon && playerCount > 0 && answeredIds.size >= playerCount && txTimer !== null) {
+        $("bcnStat").textContent = "Everyone answered 🎉";
+        finishBroadcast();
+      }
+    };
+    ch.on("presence", { event: "sync" }, () => {
+      const st = ch.presenceState() as unknown as Record<string, { role?: string }[]>;
+      playerCount = Object.values(st).flat().filter((m) => m.role === "player").length;
+      check();
+    });
+    ch.on("broadcast", { event: "answered" }, ({ payload }) => {
+      answeredIds.add((payload as { id: string }).id);
+      check();
+    });
+    ch.on("broadcast", { event: "next" }, ({ payload }) => {
+      answeredIds.clear();
+      const seed = (payload as { seed: number }).seed;
+      if (isBeacon) {
+        void autoBeacon(seed);
+      } else {
+        $("stage").classList.add("hide");
+        $("plStat").textContent = "✨ Next round starting…";
+      }
+    });
+    ch.subscribe((s) => {
+      if (s === "SUBSCRIBED") void ch.track({ role: partyRole });
+    });
+    partyReportAnswer = () => void ch.send({ type: "broadcast", event: "answered", payload: { id } });
+  } catch {
+    /* realtime unavailable — the round still plays, just no auto-advance */
+  }
+}
 
 async function autoBeacon(seed?: number): Promise<void> {
   const gen = ++bcnGen;
@@ -407,10 +475,14 @@ function drawWord(w: number): void {
   const ctx = c.getContext("2d")!;
   const arr = known[w]!;
   const width = widths[w]!;
+  // Pixel-fill look: the canvas keeps its dark background and only inked
+  // pixels light up as they arrive, so the phrase glows into existence pixel
+  // by pixel instead of gray row-blocks snapping in. Unknown and blank pixels
+  // both stay dark (transparent → shows the .wc background).
+  ctx.clearRect(0, 0, width, GH);
+  ctx.fillStyle = "#eaf6f0";
   for (let i = 0; i < width * GH; i++) {
-    const v = arr[i]!;
-    ctx.fillStyle = v === 2 ? "#2a2a2d" : v === 1 ? "#000000" : "#ffffff";
-    ctx.fillRect(i % width, Math.floor(i / width), 1, 1);
+    if (arr[i] === 1) ctx.fillRect(i % width, Math.floor(i / width), 1, 1);
   }
 }
 function setRow(w: number, r: number, bitsStr: string): void {
@@ -428,7 +500,6 @@ function setRow(w: number, r: number, bitsStr: string): void {
   if (added === 0) return;
   knownCount += added;
   drawWord(w);
-  for (const [wi, el] of wordCanvas.entries()) el.classList.toggle("now", wi === w);
   $("count").textContent = `${totalTiles ? Math.round((knownCount / totalTiles) * 100) : 0}% revealed`;
   tickFx();
 }
@@ -617,12 +688,20 @@ function lockIn(ci: number, btn: HTMLButtonElement): void {
   answered = true;
   const buttons = [...$("opts").querySelectorAll("button")];
   for (const b of buttons) b.disabled = true;
+  if (partyRoom) partyReportAnswer();
   if (ci === answerIdx) {
     btn.classList.add("correct");
     solved = true;
     const frac = totalTiles ? knownCount / totalTiles : 1;
     const score = Math.max(50, Math.round((1 - frac) * 1000));
-    endRound();
+    // Party: keep the camera running so the next round's broadcast flows in and
+    // auto-resets this player. Solo: stop the camera as before.
+    if (partyRoom) {
+      if (countdown !== null) clearInterval(countdown);
+      countdown = null;
+    } else {
+      endRound();
+    }
     showWinStage(score, frac);
   } else {
     btn.classList.add("wrong");
@@ -630,6 +709,7 @@ function lockIn(ci: number, btn: HTMLButtonElement): void {
       if (b.textContent === (PHRASES[answerIdx] ?? "")) b.classList.add("correct");
     }
     $("result").innerHTML = `<span class="lose">Locked in — not it 😬</span>`;
+    if (partyRoom) $("plStat").textContent = "Locked in — waiting for the next round…";
   }
 }
 
@@ -792,6 +872,7 @@ if (partyRoom) {
   const nb = $<HTMLButtonElement>("newBtn");
   nb.textContent = "‹ Back to lobby";
   nb.onclick = backToLobby;
+  void setupParty();
   if (partyRole === "beacon") {
     // Seed comes from the lobby so multiple beacons beam the SAME phrase.
     const seed = Number(partyParams.get("seed"));
