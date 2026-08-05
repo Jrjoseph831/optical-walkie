@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Fragments — Guess the Phrase</title>
+<style>
+  :root{--bg:#0a0a0c;--card:#161618;--border:#2a2a2d;--text:#e8e8ea;--dim:#8a8a90;--green:#2fbf71;--gold:#EF9F27;--red:#E24B4A;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;min-height:100%;}
+  body{background:var(--bg);color:var(--text);font:14px/1.4 -apple-system,system-ui,sans-serif;padding:10px;display:flex;flex-direction:column;gap:10px;}
+  h1{font-size:16px;margin:0;}
+  .sub{font-size:11px;color:var(--dim);margin:0;}
+  .roles{display:flex;gap:8px;}
+  .roles button{flex:1;padding:14px;font-size:16px;font-weight:700;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);}
+  .roles button.active{background:var(--gold);color:#111;border-color:var(--gold);}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;}
+  label{display:block;font-size:11px;color:var(--dim);margin-bottom:4px;}
+  select,input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:15px;}
+  .btn{width:100%;padding:14px;font-size:16px;font-weight:800;border-radius:12px;border:0;background:var(--green);color:#052012;margin-top:10px;}
+  .btn.alt{background:var(--gold);color:#111;}
+  .btn.stop{background:var(--red);color:#fff;}
+  .hide{display:none;}
+  #bb{image-rendering:pixelated;width:min(82vw,420px);height:min(82vw,420px);background:#fff;border-radius:8px;display:block;margin:10px auto 0;}
+  .timerRow{display:flex;align-items:center;justify-content:space-between;}
+  .timer{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;}
+  .timer.low{color:var(--red);}
+  .meter{display:flex;align-items:center;gap:8px;}
+  .dot{width:12px;height:12px;border-radius:50%;background:#333;transition:background .1s,box-shadow .1s;}
+  .dot.hit{background:var(--green);box-shadow:0 0 10px var(--green);}
+  .words{font:600 20px/1.7 ui-monospace,monospace;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;min-height:70px;word-break:break-word;}
+  .w{color:var(--text);}
+  .blank{color:var(--dim);letter-spacing:1px;}
+  .status{font-size:12px;color:var(--dim);min-height:16px;}
+  .result{font-size:19px;font-weight:800;text-align:center;padding:8px;}
+  .win{color:var(--green);} .lose{color:var(--red);}
+  video{position:fixed;width:2px;height:2px;opacity:0.01;pointer-events:none;top:0;left:0;}
+  canvas.work{display:none;}
+</style>
+</head>
+<body>
+  <div>
+    <h1>Guess the Phrase</h1>
+    <p class="sub">The beacon scatters a phrase word by word. Catch what you can before the timer runs out, then guess the whole thing. Fewer words needed = more points.</p>
+  </div>
+
+  <div class="roles">
+    <button id="roleBeacon">📡 Beacon</button>
+    <button id="rolePlayer">🔍 Player</button>
+  </div>
+
+  <!-- BEACON -->
+  <div id="beaconCard" class="card hide">
+    <label>Phrase</label>
+    <select id="puzzle"></select>
+    <button id="bcnBtn" class="btn alt">Start broadcasting</button>
+    <canvas id="bb" width="440" height="440"></canvas>
+    <div class="status" id="bcnStat" style="margin-top:8px;text-align:center"></div>
+  </div>
+
+  <!-- PLAYER -->
+  <div id="playerCard" class="card hide">
+    <div class="timerRow">
+      <div class="timer" id="timer">0:20</div>
+      <div class="meter"><div class="dot" id="dot"></div><span id="count" class="sub">0 / ? words</span></div>
+    </div>
+    <div class="words" id="words" style="margin-top:8px">Start scanning and aim at the beacon.</div>
+    <div class="status" id="plStat" style="margin-top:6px"></div>
+    <button id="camBtn" class="btn">Start scanning</button>
+    <div id="answerWrap" class="hide" style="margin-top:12px">
+      <input id="guess" placeholder="Guess the full phrase…" autocapitalize="off" autocorrect="off" />
+      <button id="guessBtn" class="btn">Guess</button>
+    </div>
+    <div id="result" class="result"></div>
+    <button id="newBtn" class="btn alt">🔄 New game</button>
+  </div>
+
+  <video id="video" playsinline muted></video>
+  <canvas id="work" class="work"></canvas>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
