@@ -24,7 +24,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const TX_FPS = 16;
 const SCAN_MS = 70;
 const META_EVERY = 12;
-const ROW_REPEAT = 7; // frames each row lingers so a camera can catch it (no loop)
+const ROW_REPEAT = 7; // frames each row lingers so a camera can catch it
+const TX_PASSES = 3; // full passes of the phrase, so a late camera still completes the board
 
 // 5x7 dot-matrix font. Each glyph is 7 rows of 5 columns ("1" = ink).
 const GLYPH_W = 5;
@@ -136,10 +137,10 @@ function setRole(r: "beacon" | "player"): void {
   $<HTMLButtonElement>("rolePlayer").classList.toggle("active", r === "player");
   if (r !== "beacon") stopBeacon();
   if (r !== "player") stopCam();
-  document.body.classList.remove("playing", "casting", "result");
+  document.body.classList.remove("playing", "casting", "result", "prescan");
 }
 $("roleBeacon").onclick = () => setRole("beacon");
-$("rolePlayer").onclick = () => setRole("player");
+$("rolePlayer").onclick = () => enterPlayerMode();
 
 const puzzleSel = $<HTMLSelectElement>("puzzle");
 const randOpt = document.createElement("option");
@@ -235,12 +236,17 @@ async function startBeacon(forceIdx?: number): Promise<void> {
       rowFrames.push(frameForPayload(`R|${wi}|${r}|${s}`));
     }
   });
-  for (let i = rowFrames.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [rowFrames[i], rowFrames[j]] = [rowFrames[j]!, rowFrames[i]!];
-  }
+  // Several passes, reshuffled each time. A player whose camera comes up a beat
+  // after the broadcast starts still catches every row on a later pass, so the
+  // board always completes — that's what makes the first round reliable.
   const playlist: Uint8Array[] = [];
-  for (const rf of rowFrames) for (let k = 0; k < ROW_REPEAT; k++) playlist.push(rf);
+  for (let pass = 0; pass < TX_PASSES; pass++) {
+    for (let i = rowFrames.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rowFrames[i], rowFrames[j]] = [rowFrames[j]!, rowFrames[i]!];
+    }
+    for (const rf of rowFrames) for (let k = 0; k < ROW_REPEAT; k++) playlist.push(rf);
+  }
 
   if (txTimer !== null) clearInterval(txTimer);
   let playIdx = 0;
@@ -451,6 +457,17 @@ function endRound(): void {
   b.dataset.on = "";
 }
 
+// Drop the player straight onto a single-tap "aim at the beacon" screen —
+// no role card, no second button. The one remaining tap is unavoidable: a
+// browser will not open the camera without a user gesture.
+function enterPlayerMode(): void {
+  setRole("player");
+  document.body.classList.add("prescan");
+  const b = $<HTMLButtonElement>("camBtn");
+  b.textContent = "▶  Aim at the beacon";
+  b.classList.remove("hide");
+}
+
 async function startCam(): Promise<void> {
   try {
     if (!audio) audio = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -461,6 +478,7 @@ async function startCam(): Promise<void> {
     video.srcObject = stream;
     await video.play();
     scanning = true;
+    document.body.classList.remove("prescan");
     document.body.classList.add("playing");
     document.body.classList.remove("result");
     $<HTMLButtonElement>("camBtn").textContent = "Stop scanning";
@@ -779,7 +797,7 @@ if (partyRoom) {
     const seed = Number(partyParams.get("seed"));
     void autoBeacon(Number.isFinite(seed) ? seed : undefined);
   } else if (partyRole === "player") {
-    setRole("player");
+    enterPlayerMode();
   }
 } else {
   // Walk-up solo: a big hover/fine-pointer screen is the stage, a phone is the
@@ -789,6 +807,6 @@ if (partyRoom) {
   if (desktopish) {
     void autoBeacon();
   } else {
-    setRole("player");
+    enterPlayerMode();
   }
 }

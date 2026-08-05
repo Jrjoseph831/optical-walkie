@@ -97,6 +97,20 @@
   canvas.work{display:none;}
   .foot{text-align:center;font-size:10px;color:var(--faint);letter-spacing:.06em;padding:2px 0 6px;}
 
+  /* ---------- pre-scan: one clean tap to start the camera ---------- */
+  #tapHint{display:none;text-align:center;}
+  .th-ico{font-size:46px;animation:pulse 1.8s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.12);opacity:1}}
+  .th-title{font-size:21px;font-weight:900;margin:12px 0 6px;}
+  .th-sub{font-size:13px;color:var(--dim);margin:0 auto;max-width:30ch;line-height:1.45;}
+  body.prescan .brand,body.prescan .hero,body.prescan .roles,body.prescan .foot,body.prescan #beaconCard{display:none;}
+  body.prescan .panel-head,body.prescan #words,body.prescan #answerWrap,body.prescan #result,body.prescan #newBtn,body.prescan #plStat{display:none;}
+  body.prescan #tapHint{display:block;}
+  body.prescan #playerCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:26px;box-shadow:none;
+    background:radial-gradient(900px 540px at 50% -6%, rgba(55,224,176,.14), var(--bg) 62%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;}
+  body.prescan #camBtn{max-width:300px;width:100%;font-size:18px;padding:20px;margin:0;}
+
   /* ---------- immersive states ---------- */
   body.playing .brand,body.playing .hero,body.playing .roles,body.playing .foot,body.playing #beaconCard{display:none;}
   body.playing #playerCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:22px;box-shadow:none;
@@ -174,6 +188,11 @@
 
   <!-- PLAYER -->
   <section id="playerCard" class="panel hide">
+    <div id="tapHint">
+      <div class="th-ico">📡</div>
+      <h3 class="th-title">Point at the beacon</h3>
+      <p class="th-sub">The other screen is beaming the answer in light. Tap below, then aim your camera at it.</p>
+    </div>
     <div class="panel-head">
       <h3>Player</h3>
       <div class="hud">

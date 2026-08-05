@@ -54,10 +54,10 @@ function setRole(r: "beacon" | "player"): void {
   $<HTMLButtonElement>("rolePlayer").classList.toggle("active", r === "player");
   if (r !== "beacon") stopBeacon();
   if (r !== "player") stopCam();
-  document.body.classList.remove("playing", "casting", "result");
+  document.body.classList.remove("playing", "casting", "result", "prescan");
 }
 $("roleBeacon").onclick = () => setRole("beacon");
-$("rolePlayer").onclick = () => setRole("player");
+$("rolePlayer").onclick = () => enterPlayerMode();
 
 const puzzleSel = $<HTMLSelectElement>("puzzle");
 const randOpt = document.createElement("option");
@@ -245,6 +245,17 @@ function tick(): void {
   setTimeout(() => d.classList.remove("hit"), 90);
 }
 
+// Drop the player straight onto a single-tap "aim at the beacon" screen — no
+// role card, no second button. The remaining tap is unavoidable: a browser
+// won't open the camera without a user gesture.
+function enterPlayerMode(): void {
+  setRole("player");
+  document.body.classList.add("prescan");
+  const b = $<HTMLButtonElement>("camBtn");
+  b.textContent = "▶  Aim at the beacon";
+  b.classList.remove("hide");
+}
+
 async function startCam(): Promise<void> {
   // Unlock audio inside the user gesture (tap) — otherwise it stays suspended
   // on mobile and no ticks play.
@@ -257,6 +268,7 @@ async function startCam(): Promise<void> {
     video.srcObject = stream;
     await video.play();
     scanning = true;
+    document.body.classList.remove("prescan");
     document.body.classList.add("playing");
     document.body.classList.remove("result");
     initReveal();
@@ -472,5 +484,5 @@ async function autoBeacon(): Promise<void> {
 if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
   void autoBeacon();
 } else {
-  setRole("player");
+  enterPlayerMode();
 }
