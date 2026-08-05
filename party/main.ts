@@ -1,21 +1,10 @@
-// SIGNAL Party lobby — Supabase Realtime (presence + broadcast).
-// A room is just a realtime channel keyed by its code. No database.
+// SIGNAL Party lobby — create/join a room, live roster + scoreboard, launch games.
 import QRCode from "qrcode";
-import { supabase, type PlayerMeta } from "../shared/supabase";
+import { joinRoom, myId, myName, setName, getScore, type PlayerMeta } from "../shared/room";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-// UUID with a fallback — crypto.randomUUID throws on older mobile Safari, which
-// would kill the whole script and leave an unstyled shell.
-function uuid(): string {
-  const c = crypto as unknown as { randomUUID?: () => string };
-  if (typeof c.randomUUID === "function") return c.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
-    const r = (Math.random() * 16) | 0;
-    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
 function genCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let s = "";
@@ -23,13 +12,11 @@ function genCode(): string {
   return s;
 }
 
-const playerId = uuid();
 let code = "";
 let isHost = false;
-let name = localStorage.getItem("signal_name") ?? "";
+let name = myName();
 let channel: RealtimeChannel | null = null;
 
-// ---- routing: ?room means we came from a QR/link → skip landing ----
 const params = new URLSearchParams(location.search);
 const roomParam = params.get("room");
 if (roomParam) {
@@ -54,7 +41,6 @@ function showNameGate(): void {
   $("heroSub").textContent = isHost ? "Share the code — get everyone in." : `Joining room ${code}.`;
 }
 
-// ---- landing actions ----
 $<HTMLButtonElement>("createBtn").onclick = () => {
   code = genCode();
   isHost = true;
@@ -76,53 +62,51 @@ $<HTMLInputElement>("codeInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter") $<HTMLButtonElement>("codeJoinBtn").click();
 });
 
-// ---- name gate ----
-$<HTMLButtonElement>("joinBtn").onclick = () => void enterLobby();
+$<HTMLButtonElement>("joinBtn").onclick = () => enterLobby();
 $<HTMLInputElement>("nameInput").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") void enterLobby();
+  if (e.key === "Enter") enterLobby();
 });
 
-async function enterLobby(): Promise<void> {
+function enterLobby(): void {
   const n = $<HTMLInputElement>("nameInput").value.trim();
   if (!n) {
     $("gateStatus").textContent = "Enter a name to continue.";
     return;
   }
   name = n;
-  localStorage.setItem("signal_name", name);
+  setName(name);
   $("nameGate").classList.add("hide");
   $("lobby").classList.remove("hide");
   $("codeText").textContent = code;
-  await connect();
+  connect();
 }
 
-// ---- realtime ----
-async function connect(): Promise<void> {
+function connect(): void {
   const joinUrl = `${location.origin}${location.pathname}?room=${code}`;
   QRCode.toCanvas($("qr"), joinUrl, { width: 220, margin: 1, color: { dark: "#0f1118", light: "#ffffff" } }, () => {});
 
-  channel = supabase.channel(`room:${code}`, { config: { presence: { key: playerId } } });
-  channel.on("presence", { event: "sync" }, renderRoster);
-  channel.on("broadcast", { event: "start" }, () => {
-    $("lobbyStatus").textContent = "🎮 Everyone's ready! (game launch wires in next.)";
+  const meta: Omit<PlayerMeta, "id"> = { name, host: isHost, score: getScore(code), ready: false, beacon: false };
+  const r = joinRoom(code, meta, renderRoster);
+  channel = r.channel;
+
+  channel.on("broadcast", { event: "launch" }, ({ payload }) => {
+    const p = payload as { game: string; beaconId: string };
+    const role = p.beaconId === myId() ? "beacon" : "player";
+    location.href = `../${p.game}/?room=${code}&role=${role}`;
   });
-  channel.subscribe(async (status) => {
-    if (status === "SUBSCRIBED") {
-      const meta: PlayerMeta = { id: playerId, name, host: isHost, score: 0, ready: false, beacon: false };
-      await channel!.track(meta);
-      if (isHost) $("readyBtn").classList.remove("hide");
-      $("lobbyStatus").textContent = isHost ? "Waiting for players…" : "You're in! Waiting for the host to start.";
-    } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-      $("lobbyStatus").textContent = "Connection problem — check your network and refresh.";
-    }
-  });
+
+  if (isHost) {
+    const btn = $<HTMLButtonElement>("readyBtn");
+    btn.textContent = "▶  Start · Phrase";
+    btn.classList.remove("hide");
+  }
+  $("lobbyStatus").textContent = isHost
+    ? "When everyone's in, hit Start."
+    : "You're in! Waiting for the host to start.";
 }
 
-function renderRoster(): void {
-  if (!channel) return;
-  const state = channel.presenceState() as unknown as Record<string, PlayerMeta[]>;
-  const players = Object.values(state).flat();
-  players.sort((a, b) => (b.host ? 1 : 0) - (a.host ? 1 : 0));
+function renderRoster(players: PlayerMeta[]): void {
+  players.sort((a, b) => b.score - a.score || (b.host ? 1 : 0) - (a.host ? 1 : 0));
   $("plab").textContent = `Players (${players.length})`;
   const roster = $("roster");
   roster.innerHTML = "";
@@ -134,18 +118,21 @@ function renderRoster(): void {
     av.textContent = (p.name || "?").slice(0, 2).toUpperCase();
     const nm = document.createElement("div");
     nm.className = "nm";
-    nm.textContent = p.name + (p.id === playerId ? " (you)" : "");
+    nm.textContent = p.name + (p.id === myId() ? " (you)" : "");
     const tag = document.createElement("div");
-    tag.className = p.ready && !p.host ? "tag ready" : "tag";
-    tag.textContent = p.host ? "host" : p.ready ? "ready" : "";
-    row.append(av, nm, tag);
+    tag.className = "tag";
+    tag.textContent = p.host ? "host" : "";
+    const sc = document.createElement("div");
+    sc.className = "sc";
+    sc.textContent = String(p.score || 0);
+    row.append(av, nm, tag, sc);
     roster.appendChild(row);
   }
 }
 
 $<HTMLButtonElement>("readyBtn").onclick = () => {
-  channel?.send({ type: "broadcast", event: "start", payload: { by: name } });
-  $("lobbyStatus").textContent = "🎮 Starting…";
+  channel?.send({ type: "broadcast", event: "launch", payload: { game: "sentence", beaconId: myId() } });
+  $("lobbyStatus").textContent = "🎮 Launching Phrase…";
 };
 
 window.addEventListener("beforeunload", () => {

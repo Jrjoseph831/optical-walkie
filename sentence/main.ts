@@ -74,6 +74,15 @@ const FONT: Record<string, string[]> = {
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+// Party mode: launched from the lobby with ?room=CODE&role=beacon|player.
+const partyParams = new URLSearchParams(location.search);
+const partyRoom = partyParams.get("room");
+const partyRole = partyParams.get("role");
+function addScore(room: string, pts: number): void {
+  const k = `signal_score_${room}`;
+  localStorage.setItem(k, String(Number(localStorage.getItem(k) || 0) + pts));
+}
+
 const PHRASES: string[] = [
   "may the force be with you",
   "to be or not to be",
@@ -477,6 +486,7 @@ $<HTMLButtonElement>("guessBtn").onclick = async () => {
     solved = true;
     const frac = totalTiles ? knownCount / totalTiles : 1;
     const score = Math.max(50, Math.round((1 - frac) * 1000));
+    if (partyRoom) addScore(partyRoom, score);
     $("result").innerHTML = `<span class="win">🎉 Correct!<br />Guessed at ${Math.round(frac * 100)}% revealed<br />${score} pts</span>`;
     $("answerWrap").classList.add("hide");
     document.body.classList.add("result");
@@ -522,4 +532,26 @@ async function keepAwake(): Promise<void> {
   try {
     await (navigator as unknown as { wakeLock?: { request(t: string): Promise<unknown> } }).wakeLock?.request("screen");
   } catch { /* ignore */ }
+}
+
+// ---- party mode: launched from the lobby ----
+if (partyRoom) {
+  const backToLobby = () => {
+    location.href = `../party/?room=${partyRoom}`;
+  };
+  const brand = document.querySelector(".brand") as HTMLAnchorElement | null;
+  if (brand) {
+    brand.href = `../party/?room=${partyRoom}`;
+    const back = brand.querySelector(".back");
+    if (back) back.textContent = "‹ lobby";
+  }
+  const nb = $<HTMLButtonElement>("newBtn");
+  nb.textContent = "‹ Back to lobby";
+  nb.onclick = backToLobby;
+  if (partyRole === "beacon") {
+    setRole("beacon");
+    void startBeacon(); // beacon needs no camera gesture — auto-broadcast
+  } else if (partyRole === "player") {
+    setRole("player");
+  }
 }
