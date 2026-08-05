@@ -67,9 +67,7 @@
     animation:glow 3s ease-in-out infinite;pointer-events:none;}
   @keyframes glow{0%,100%{opacity:.45}50%{opacity:1}}
   #bb{image-rendering:pixelated;width:min(72vw,340px);height:min(72vw,340px);background:#fff;border-radius:12px;display:block;}
-  .tx-caption{font-size:12px;color:var(--faint);display:flex;align-items:center;gap:7px;}
-  .tx-caption::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal);animation:blink 1.4s infinite;}
-  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  .tx-caption{font-size:12px;color:var(--faint);text-align:center;}
 
   .signal{width:14px;height:14px;border-radius:50%;background:#2a2e3c;transition:.1s;}
   .signal.hit{background:var(--gold);box-shadow:0 0 12px var(--gold);}
@@ -109,8 +107,7 @@
   body.casting #beaconCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:24px;box-shadow:none;
     background:radial-gradient(900px 540px at 50% -8%, rgba(55,224,176,.14), var(--bg) 62%);
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
-  body.casting label,body.casting #puzzle,body.casting .panel-head h3{display:none;}
-  body.casting .panel-head{margin:0;justify-content:center;}
+  body.casting label,body.casting #puzzle,body.casting .panel-head{display:none;}
   body.casting #bb{width:min(82vw,440px);height:min(82vw,440px);}
   body.casting #bcnBtn{position:fixed;left:22px;right:22px;bottom:22px;width:auto;margin:0;}
 </style>
@@ -134,9 +131,8 @@
 
   <!-- BEACON -->
   <section id="beaconCard" class="panel hide">
-    <div class="panel-head"><h3>Beacon</h3><span class="pill" id="bcnStat">Ready</span></div>
-    <label>Choose a phrase</label>
-    <select id="puzzle"></select>
+    <div class="panel-head"><h3>Beacon</h3><span class="pill" id="bcnStat" hidden></span></div>
+    <select id="puzzle" hidden></select>
     <button id="bcnBtn" class="btn primary">Start</button>
     <div class="transmitter">
       <div class="tx-frame"><canvas id="bb" width="440" height="440"></canvas></div>
