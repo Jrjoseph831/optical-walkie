@@ -188,6 +188,7 @@ export default defineConfig(({ mode }) => {
           fragments: resolve(__dirname, "fragments/index.html"),
           sentence: resolve(__dirname, "sentence/index.html"),
           hub: resolve(__dirname, "hub/index.html"),
+          party: resolve(__dirname, "party/index.html"),
         },
       },
     },

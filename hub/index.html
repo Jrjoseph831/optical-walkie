@@ -48,6 +48,9 @@
   .t-phrase{background:linear-gradient(155deg,#69ecc6,var(--teal));}
   .t-soon{background:linear-gradient(155deg,#3a3f52,#2a2e3d);color:#8b90a3;box-shadow:0 8px 20px rgba(0,0,0,.3);pointer-events:none;}
   .t-soon .lock{position:absolute;top:16px;right:16px;font-size:16px;opacity:.8;}
+  .t-party{background:linear-gradient(155deg,#b49dff,#7b5bff);color:#120a24;}
+  .party-wide{grid-column:1 / -1;aspect-ratio:auto;flex-direction:row;align-items:center;gap:16px;padding:20px 22px;}
+  .party-wide .ico{font-size:40px;}
 
   .foot{margin-top:auto;padding-top:24px;text-align:center;color:#5b6072;font-size:11px;letter-spacing:.08em;}
   .foot b{color:var(--dim);font-weight:700;}
@@ -60,7 +63,15 @@
     <div class="settings" aria-hidden="true">?</div>
   </div>
 
-  <p class="lead">Pick a game</p>
+  <p class="lead">Play together</p>
+  <div class="grid">
+    <a class="tile t-party party-wide" href="../party/">
+      <span class="ico">🎉</span>
+      <span><span class="name">Party up</span><span class="desc">a room with names &amp; scores</span></span>
+    </a>
+  </div>
+
+  <p class="lead" style="margin-top:16px">Pick a game</p>
   <div class="grid">
     <a class="tile t-walkie" href="../walkie/">
       <span class="ico">💬</span>

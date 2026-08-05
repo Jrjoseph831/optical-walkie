@@ -27,5 +27,8 @@
     "vite-plugin-pwa": "^1.3.0",
     "vite-plugin-singlefile": "^2.3.3",
     "zxing-wasm": "^2.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.1"
   }
 }
