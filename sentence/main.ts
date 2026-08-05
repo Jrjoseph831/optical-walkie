@@ -82,6 +82,7 @@ const dec = new TextDecoder();
 const partyParams = new URLSearchParams(location.search);
 const partyRoom = partyParams.get("room");
 const partyRole = partyParams.get("role");
+const partySession = partyParams.get("of"); // present => part of a multi-round party session
 function addScore(room: string, pts: number): number {
   const k = `signal_score_${room}`;
   const total = Number(localStorage.getItem(k) || 0) + pts;
@@ -324,6 +325,13 @@ function finishBroadcast(): void {
   const b = $<HTMLButtonElement>("bcnBtn");
   b.classList.remove("stop");
   b.dataset.on = "";
+  // In a party session the hub drives round flow: tell everyone the round is
+  // over and they'll all return to the standings screen.
+  if (partySession) {
+    void partyCh?.send({ type: "broadcast", event: "roundend", payload: {} });
+    b.textContent = "Round complete";
+    return;
+  }
   if (partyRoom) {
     b.textContent = "▶  Next round";
     b.onclick = () => {
@@ -407,6 +415,10 @@ async function setupParty(): Promise<void> {
         $("stage").classList.add("hide");
         $("plStat").textContent = "✨ Next round starting…";
       }
+    });
+    // Session round is over — everyone heads back to the standings hub.
+    ch.on("broadcast", { event: "roundend" }, () => {
+      location.href = `../party/?room=${partyRoom}&back=1`;
     });
     ch.subscribe((s) => {
       if (s === "SUBSCRIBED") void ch.track({ role: partyRole });

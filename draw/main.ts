@@ -32,6 +32,7 @@ const MARGIN_QR = 4;
 const partyParams = new URLSearchParams(location.search);
 const partyRoom = partyParams.get("room");
 const partyRole = partyParams.get("role");
+const partySession = partyParams.get("of");
 function addScore(room: string, pts: number): number {
   const k = `signal_score_${room}`;
   const total = Number(localStorage.getItem(k) || 0) + pts;
@@ -236,10 +237,13 @@ function finishBroadcast(): void {
   if (txTimer !== null) clearInterval(txTimer);
   txTimer = null;
   if (endFrameCache) renderFrame(endFrameCache);
-  // Offer the next drawing. In a party, this re-deals a new word and returns to
-  // the pad; solo just does the same.
   $("bcnStat").removeAttribute("hidden");
   $("bcnStat").textContent = "Beamed! ✏️";
+  // Party session: hand control back to the standings hub.
+  if (partySession) {
+    void partyCh?.send({ type: "broadcast", event: "roundend", payload: {} });
+    return;
+  }
   showDrawerNext();
 }
 
@@ -613,6 +617,9 @@ async function setupParty(): Promise<void> {
         $("stage").classList.add("hide");
         $("plStat").textContent = "✨ New drawing coming…";
       }
+    });
+    ch.on("broadcast", { event: "roundend" }, () => {
+      location.href = `../party/?room=${partyRoom}&back=1`;
     });
     ch.subscribe((s) => {
       if (s === "SUBSCRIBED") void ch.track({ role: partyRole });

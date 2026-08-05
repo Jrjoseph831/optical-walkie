@@ -32,6 +32,17 @@ const META_EVERY = 14; // inject the meta fragment roughly every N frames
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+const partyParams = new URLSearchParams(location.search);
+const partyRoom = partyParams.get("room");
+const partyRole = partyParams.get("role");
+const partySession = partyParams.get("of");
+function addScore(room: string, pts: number): number {
+  const k = `signal_score_${room}`;
+  const total = Number(localStorage.getItem(k) || 0) + pts;
+  localStorage.setItem(k, String(total));
+  return total;
+}
+
 const IMAGES: { emoji: string; answer: string; label: string }[] = [
   { emoji: "🐘", answer: "elephant", label: "Mystery A" },
   { emoji: "🍕", answer: "pizza", label: "Mystery B" },
@@ -39,6 +50,16 @@ const IMAGES: { emoji: string; answer: string; label: string }[] = [
   { emoji: "🚀", answer: "rocket", label: "Mystery D" },
   { emoji: "🦈", answer: "shark", label: "Mystery E" },
   { emoji: "🍔", answer: "burger", label: "Mystery F" },
+  { emoji: "🐱", answer: "cat", label: "Mystery G" },
+  { emoji: "🏠", answer: "house", label: "Mystery H" },
+  { emoji: "🌲", answer: "tree", label: "Mystery I" },
+  { emoji: "🚗", answer: "car", label: "Mystery J" },
+  { emoji: "🍎", answer: "apple", label: "Mystery K" },
+  { emoji: "⭐", answer: "star", label: "Mystery L" },
+  { emoji: "👻", answer: "ghost", label: "Mystery M" },
+  { emoji: "🤖", answer: "robot", label: "Mystery N" },
+  { emoji: "🌙", answer: "moon", label: "Mystery O" },
+  { emoji: "🐟", answer: "fish", label: "Mystery P" },
 ];
 
 async function sha256hex(s: string): Promise<string> {
@@ -135,9 +156,14 @@ function renderFrame(frame: Uint8Array): void {
   bbCtx.drawImage(modC, 0, 0, bb.width, bb.height);
 }
 
-async function startBeacon(): Promise<void> {
+async function startBeacon(forceIdx?: number): Promise<void> {
   bcnGen++;
-  const idx = puzzleSel.value === "random" ? Math.floor(Math.random() * IMAGES.length) : Number(puzzleSel.value);
+  const idx =
+    forceIdx !== undefined
+      ? forceIdx % IMAGES.length
+      : puzzleSel.value === "random"
+        ? Math.floor(Math.random() * IMAGES.length)
+        : Number(puzzleSel.value);
   const pick = IMAGES[idx]!;
   const hash = await sha256hex(pick.answer);
   const tiles = imageToTiles(pick.emoji);
@@ -409,16 +435,19 @@ function lockIn(ci: number, btn: HTMLButtonElement): void {
   answered = true;
   const buttons = [...$("opts").querySelectorAll("button")];
   for (const b of buttons) b.disabled = true;
+  if (partyRoom) partyReportAnswer();
   if (ci === answerIdx) {
     btn.classList.add("correct");
     solved = true;
     const total = gridW * gridH;
     const revealed = tilePix.size / total;
     const score = Math.max(50, Math.round((1 - revealed) * 1000));
+    if (partyRoom) addScore(partyRoom, score);
     $("result").innerHTML = `<span class="win">🎉 Correct!<br />Solved at ${Math.round(revealed * 100)}% revealed<br />${score} pts</span>`;
     $("answerWrap").classList.add("hide");
     document.body.classList.add("result");
-    stopCam();
+    // In a party keep the camera alive so the round can end cleanly; solo stops.
+    if (!partyRoom) stopCam();
   } else {
     btn.classList.add("wrong");
     for (const b of buttons) {
@@ -469,7 +498,7 @@ function drawCountdown(n: number): void {
   bbCtx.fillText(String(n), bb.width / 2, bb.height / 2 + bb.height * 0.03);
 }
 
-async function autoBeacon(): Promise<void> {
+async function autoBeacon(seed?: number): Promise<void> {
   const gen = ++bcnGen;
   setRole("beacon");
   document.body.classList.add("casting");
@@ -478,10 +507,78 @@ async function autoBeacon(): Promise<void> {
     await new Promise((r) => setTimeout(r, 1000));
     if (gen !== bcnGen) return;
   }
-  void startBeacon();
+  void startBeacon(seed);
+  if (partySession) armRoundSafetyTimer();
 }
 
-if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+// ---- party coordination (lazy realtime) ----
+let partyCh: { send: (a: unknown) => unknown } | null = null;
+let partyReportAnswer: () => void = () => {};
+let roundEnded = false;
+
+function endRevealRound(): void {
+  if (roundEnded) return;
+  roundEnded = true;
+  if (txTimer !== null) clearInterval(txTimer);
+  txTimer = null;
+  void partyCh?.send({ type: "broadcast", event: "roundend", payload: {} });
+}
+// Reveal loops forever, so a session round needs a stop: end when everyone has
+// answered, or after a safety window so one AFK guesser can't stall the party.
+function armRoundSafetyTimer(): void {
+  window.setTimeout(() => endRevealRound(), 75_000);
+}
+
+async function setupParty(): Promise<void> {
+  if (!partyRoom) return;
+  try {
+    const [{ supabase }, { myId }] = await Promise.all([import("../shared/supabase"), import("../shared/profile")]);
+    const id = myId();
+    const isBeacon = partyRole === "beacon";
+    const ch = supabase.channel(`room:${partyRoom}`, { config: { presence: { key: id }, broadcast: { self: true } } });
+    partyCh = ch;
+    const answeredIds = new Set<string>();
+    let playerCount = 0;
+    const check = (): void => {
+      if (isBeacon && partySession && playerCount > 0 && answeredIds.size >= playerCount) endRevealRound();
+    };
+    ch.on("presence", { event: "sync" }, () => {
+      const st = ch.presenceState() as unknown as Record<string, { role?: string }[]>;
+      playerCount = Object.values(st).flat().filter((m) => m.role === "player").length;
+      check();
+    });
+    ch.on("broadcast", { event: "answered" }, ({ payload }) => {
+      answeredIds.add((payload as { id: string }).id);
+      check();
+    });
+    ch.on("broadcast", { event: "roundend" }, () => {
+      location.href = `../party/?room=${partyRoom}&back=1`;
+    });
+    ch.subscribe((s) => {
+      if (s === "SUBSCRIBED") void ch.track({ role: partyRole });
+    });
+    partyReportAnswer = () => void ch.send({ type: "broadcast", event: "answered", payload: { id } });
+  } catch { /* realtime unavailable */ }
+}
+
+// ---- init ----
+if (partyRoom) {
+  const brand = document.querySelector(".brand") as HTMLAnchorElement | null;
+  if (brand) {
+    brand.href = `../party/?room=${partyRoom}`;
+    const back = brand.querySelector(".back");
+    if (back) back.textContent = "‹ lobby";
+  }
+  $<HTMLButtonElement>("newBtn").textContent = "‹ Back to lobby";
+  $<HTMLButtonElement>("newBtn").onclick = () => (location.href = `../party/?room=${partyRoom}`);
+  void setupParty();
+  if (partyRole === "beacon") {
+    const seed = Number(partyParams.get("seed"));
+    void autoBeacon(Number.isFinite(seed) ? seed : undefined);
+  } else {
+    enterPlayerMode();
+  }
+} else if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
   void autoBeacon();
 } else {
   enterPlayerMode();
