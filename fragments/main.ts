@@ -141,7 +141,10 @@ async function startBeacon(): Promise<void> {
   const pick = IMAGES[idx]!;
   const hash = await sha256hex(pick.answer);
   const tiles = imageToTiles(pick.emoji);
-  const metaFrame = frameForPayload(`M|${GRID}|${GRID}|${hash}`);
+  // Round nonce: lets players auto-reset when the beacon starts a fresh image
+  // instead of piling new tiles onto the old board (see handleFragment).
+  const round = Math.floor(Math.random() * 1e9);
+  const metaFrame = frameForPayload(`M|${GRID}|${GRID}|${hash}|${round}`);
   const tileFrames = tiles.map((t, i) => frameForPayload(`T|${i}|${t[0]}|${t[1]}|${t[2]}`));
 
   if (txTimer !== null) clearInterval(txTimer);
@@ -194,6 +197,7 @@ let audio: AudioContext | null = null;
 let gridW = GRID;
 let gridH = GRID;
 let answerHash: string | null = null;
+let roundId: string | null = null;
 const tilePix = new Map<number, number[]>();
 const doneStreams = new Set<string>();
 const decoders = new Map<string, LTDecoder>();
@@ -313,21 +317,28 @@ function onFrame(bytes: Uint8Array): void {
 function handleFragment(str: string): void {
   const p = str.split("|");
   if (p[0] === "M") {
-    if (!answerHash) {
-      const w = Number(p[1]);
-      const h = Number(p[2]);
-      if (!Number.isNaN(w) && !Number.isNaN(h)) {
-        answerHash = p[3]!;
-        // Only re-init if the grid actually differs (tiles are already drawing).
-        if (w !== gridW || h !== gridH) {
-          gridW = w;
-          gridH = h;
-          initReveal();
-          for (const [idx, rgb] of tilePix) drawTile(idx, rgb);
-        }
-        $("plStat").textContent = "Locked on — keep filling, guess when ready.";
-      }
+    const w = Number(p[1]);
+    const h = Number(p[2]);
+    if (Number.isNaN(w) || Number.isNaN(h)) return;
+    const rid = p[4] ?? "";
+    if (answerHash) {
+      // Same round repeating → ignore. A new nonce means the beacon switched
+      // images: wipe the stale board and adopt the fresh round automatically.
+      if (rid === roundId) return;
+      resetGame();
+      $("plStat").textContent = "✨ New image incoming…";
     }
+    roundId = rid;
+    answerHash = p[3]!;
+    // Only re-init if the grid actually differs (tiles are already drawing).
+    if (w !== gridW || h !== gridH) {
+      gridW = w;
+      gridH = h;
+      initReveal();
+      for (const [idx, rgb] of tilePix) drawTile(idx, rgb);
+    }
+    if (!$("plStat").textContent?.startsWith("✨"))
+      $("plStat").textContent = "Locked on — keep filling, guess when ready.";
     return;
   }
   if (p[0] === "T") {

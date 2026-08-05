@@ -196,7 +196,13 @@ async function startBeacon(forceIdx?: number): Promise<void> {
   const hash = await sha256hex(phrase);
   const rendered = words.map((w) => renderWord(w));
   const widths = rendered.map((r) => r.width);
-  const metaFrame = frameForPayload(`M|${words.length}|${GH}|${hash}|${widths.join(",")}`);
+  // Round nonce: players compare it to their current round and hard-reset when
+  // it changes, so "Beam another phrase" doesn't pile onto a stale board. It
+  // must differ even when the random pick lands on the same phrase twice — but
+  // in a seeded (party) round it must be the seed itself, so twin beacons
+  // beaming the same phrase agree and don't reset each other's players.
+  const round = forceIdx !== undefined ? forceIdx : Math.floor(Math.random() * 1e9);
+  const metaFrame = frameForPayload(`M|${words.length}|${GH}|${hash}|${widths.join(",")}|${round}`);
   const endFrame = frameForPayload(`E|done`);
 
   const rowFrames: Uint8Array[] = [];
@@ -319,6 +325,7 @@ let wordCount = 0;
 let widths: number[] = [];
 let totalTiles = 0;
 let answerHash: string | null = null;
+let roundId: string | null = null;
 let known: Uint8Array[] = [];
 let knownCount = 0;
 const wordCanvas: HTMLCanvasElement[] = [];
@@ -508,17 +515,26 @@ function handleFragment(str: string): void {
   }
   if (p[0] === "M") {
     const wc = Number(p[1]);
-    if (!answerHash && !Number.isNaN(wc)) {
-      wordCount = wc;
-      answerHash = p[3]!;
-      widths = (p[4] ?? "").split(",").map(Number);
-      totalTiles = widths.reduce((a, b) => a + b * GH, 0);
-      known = widths.map((wd) => new Uint8Array(wd * GH).fill(2));
-      knownCount = 0;
-      buildWordCanvases();
-      for (const [w, r, s] of pending) setRow(w, r, s);
-      pending.length = 0;
+    if (Number.isNaN(wc)) return;
+    const rid = p[5] ?? "";
+    if (answerHash) {
+      // Same round's meta repeating — nothing to do. A different nonce means
+      // the beacon moved on to a fresh phrase: wipe the stale board mid-scan
+      // and adopt the new round without making the player touch anything.
+      if (rid === roundId) return;
+      resetGame();
+      $("plStat").textContent = "✨ New phrase incoming…";
     }
+    roundId = rid;
+    wordCount = wc;
+    answerHash = p[3]!;
+    widths = (p[4] ?? "").split(",").map(Number);
+    totalTiles = widths.reduce((a, b) => a + b * GH, 0);
+    known = widths.map((wd) => new Uint8Array(wd * GH).fill(2));
+    knownCount = 0;
+    buildWordCanvases();
+    for (const [w, r, s] of pending) setRow(w, r, s);
+    pending.length = 0;
     return;
   }
   if (p[0] === "R") {
