@@ -81,6 +81,43 @@
   video{position:fixed;width:2px;height:2px;opacity:.01;pointer-events:none;top:0;left:0;}
   canvas.work{display:none;}
   .foot{text-align:center;font-size:10px;color:var(--faint);letter-spacing:.05em;padding:4px 0 8px;}
+
+  /* ---------- immersive states: only what's needed on screen ---------- */
+
+  /* PLAYER — playing: just the reveal + a minimal guess bar */
+  body.playing .brand,body.playing .seg,body.playing .foot,body.playing #beaconCard{display:none;}
+  body.playing #playerCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:22px;
+    background:radial-gradient(1000px 520px at 50% -8%, #12151f, var(--bg) 62%);box-shadow:none;
+    display:flex;flex-direction:column;}
+  body.playing .panel-head,body.playing .status,body.playing #camBtn,body.playing #newBtn{display:none;}
+  body.playing #words{flex:1;border:0;background:transparent;box-shadow:none;align-content:center;padding:8px;gap:12px 16px;}
+  body.playing .wc{height:58px;width:auto;}
+  body.playing #answerWrap{margin:0;padding-top:14px;border-top:1px solid var(--border);display:flex;gap:12px;align-items:center;}
+  body.playing #answerWrap:not(.hide){display:flex;}
+  body.playing #guess{background:transparent;border:0;border-radius:0;font-size:18px;padding:14px 2px;letter-spacing:.01em;}
+  body.playing #guess:focus{box-shadow:none;}
+  body.playing #guessBtn{width:auto;margin:0;padding:13px 24px;border-radius:999px;font-size:14px;letter-spacing:.06em;text-transform:uppercase;}
+
+  /* PLAYER — result: a clean centered outcome */
+  body.result .brand,body.result .seg,body.result .foot,body.result #beaconCard,
+  body.result .panel-head,body.result #words,body.result #answerWrap,body.result .status,body.result #camBtn{display:none;}
+  body.result #playerCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:32px;box-shadow:none;
+    background:radial-gradient(900px 520px at 50% 0%, #12151f, var(--bg) 62%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;}
+  body.result #result{font-size:26px;line-height:1.45;max-width:340px;}
+  body.result #newBtn{display:block;max-width:240px;margin:0;}
+
+  /* BEACON — casting: just the transmitter */
+  body.casting .brand,body.casting .seg,body.casting .foot,body.casting #playerCard{display:none;}
+  body.casting #beaconCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:24px;box-shadow:none;
+    background:radial-gradient(900px 520px at 50% -8%, #12151f, var(--bg) 62%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+  body.casting label,body.casting #puzzle,body.casting .panel-head h2{display:none;}
+  body.casting .panel-head{margin:0;justify-content:center;}
+  body.casting .transmitter{margin:0;}
+  body.casting #bb{width:min(82vw,440px);height:min(82vw,440px);}
+  body.casting #bcnBtn{position:fixed;left:22px;right:22px;bottom:22px;width:auto;margin:0;
+    background:transparent;border:1px solid var(--border);color:var(--dim);box-shadow:none;font-weight:700;}
 </style>
 </head>
 <body>
@@ -91,8 +128,8 @@
   </header>
 
   <div class="seg" role="tablist">
-    <button id="roleBeacon">📡 Beacon</button>
-    <button id="rolePlayer">🔍 Player</button>
+    <button id="roleBeacon">Beacon</button>
+    <button id="rolePlayer">Player</button>
   </div>
 
   <!-- BEACON -->

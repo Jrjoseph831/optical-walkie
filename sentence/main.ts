@@ -122,6 +122,7 @@ function setRole(r: "beacon" | "player"): void {
   $<HTMLButtonElement>("rolePlayer").classList.toggle("active", r === "player");
   if (r !== "beacon") stopBeacon();
   if (r !== "player") stopCam();
+  document.body.classList.remove("playing", "casting", "result");
 }
 $("roleBeacon").onclick = () => setRole("beacon");
 $("rolePlayer").onclick = () => setRole("player");
@@ -216,14 +217,16 @@ async function startBeacon(): Promise<void> {
   }, 1000 / TX_FPS);
 
   const b = $<HTMLButtonElement>("bcnBtn");
-  b.textContent = "Stop";
+  b.textContent = "Stop broadcasting";
   b.classList.add("stop");
   b.dataset.on = "1";
+  document.body.classList.add("casting");
   void keepAwake();
 }
 function stopBeacon(): void {
   if (txTimer !== null) clearInterval(txTimer);
   txTimer = null;
+  document.body.classList.remove("casting");
   const b = $<HTMLButtonElement>("bcnBtn");
   b.textContent = "Start broadcasting";
   b.classList.remove("stop");
@@ -357,6 +360,8 @@ async function startCam(): Promise<void> {
     video.srcObject = stream;
     await video.play();
     scanning = true;
+    document.body.classList.add("playing");
+    document.body.classList.remove("result");
     $<HTMLButtonElement>("camBtn").textContent = "Stop scanning";
     $<HTMLButtonElement>("camBtn").classList.add("stop");
     $<HTMLButtonElement>("camBtn").dataset.on = "1";
@@ -371,6 +376,7 @@ async function startCam(): Promise<void> {
 }
 function stopCam(): void {
   scanning = false;
+  document.body.classList.remove("playing");
   if (countdown !== null) clearInterval(countdown);
   countdown = null;
   stream?.getTracks().forEach((t) => t.stop());
@@ -471,8 +477,9 @@ $<HTMLButtonElement>("guessBtn").onclick = async () => {
     solved = true;
     const frac = totalTiles ? knownCount / totalTiles : 1;
     const score = Math.max(50, Math.round((1 - frac) * 1000));
-    $("result").innerHTML = `<span class="win">🎉 Correct! Guessed at ${Math.round(frac * 100)}% revealed → ${score} pts</span>`;
+    $("result").innerHTML = `<span class="win">🎉 Correct!<br />Guessed at ${Math.round(frac * 100)}% revealed<br />${score} pts</span>`;
     $("answerWrap").classList.add("hide");
+    document.body.classList.add("result");
     endRound();
   } else {
     $("result").innerHTML = `<span class="lose">❌ Not quite — try again</span>`;
@@ -501,9 +508,15 @@ function resetGame(): void {
   $("words").textContent = scanning ? "Locking onto the beacon…" : "Start scanning and aim at the beacon.";
   $("answerWrap").classList.toggle("hide", !scanning);
   $("plStat").textContent = "";
+  document.body.classList.remove("result");
+  if (!scanning) document.body.classList.remove("playing");
   if (scanning) startTimer();
 }
 $<HTMLButtonElement>("newBtn").onclick = resetGame;
+
+$<HTMLInputElement>("guess").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $<HTMLButtonElement>("guessBtn").click();
+});
 
 async function keepAwake(): Promise<void> {
   try {
