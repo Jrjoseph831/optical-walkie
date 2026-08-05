@@ -31,7 +31,9 @@ function render(rows: RunRow[]): void {
     rk.textContent = MEDALS[i] ?? String(i + 1);
     const av = document.createElement("div");
     av.className = "av";
-    av.textContent = r.avatar || "🙂";
+    // avatar is client-supplied text; only render it if it's actually an emoji
+    const a = (r.avatar || "").slice(0, 4);
+    av.textContent = /\p{Extended_Pictographic}/u.test(a) ? a : "🙂";
     const nm = document.createElement("div");
     nm.className = "nm";
     nm.textContent = r.name;
