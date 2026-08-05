@@ -189,6 +189,7 @@ export default defineConfig(({ mode }) => {
           sentence: resolve(__dirname, "sentence/index.html"),
           party: resolve(__dirname, "party/index.html"),
           leaderboard: resolve(__dirname, "leaderboard/index.html"),
+          draw: resolve(__dirname, "draw/index.html"),
         },
       },
     },

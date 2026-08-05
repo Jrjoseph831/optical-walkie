@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0d13" />
+<title>Draw — SIGNAL</title>
+<style>
+  :root{
+    --bg:#0b0d13; --card:rgba(255,255,255,.045); --card2:rgba(255,255,255,.08); --border:rgba(255,255,255,.09);
+    --text:#f4f6fb; --dim:#a2a8bc; --faint:#6b7186;
+    --amber:#ffb84d; --amber2:#e09a2f; --teal:#37e0b0; --red:#e2554b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;min-height:100%;}
+  body{
+    background:radial-gradient(900px 520px at 50% -8%, rgba(255,184,77,.16), transparent 60%), var(--bg);
+    color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    padding:18px 16px 28px;max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .hide{display:none !important;}
+
+  .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;}
+  .brand .logo{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-weight:900;color:#2b1a04;
+    background:linear-gradient(135deg,#ffd08a,var(--amber2));box-shadow:0 6px 16px rgba(255,184,77,.35);}
+  .brand h1{font-size:15px;letter-spacing:.22em;margin:0;font-weight:800;}
+  .brand .back{margin-left:auto;font-size:12px;font-weight:700;color:var(--dim);}
+
+  .hero{display:flex;align-items:center;gap:12px;padding:4px 2px;}
+  .hero .emoji{font-size:34px;}
+  .hero h2{margin:0;font-size:22px;font-weight:900;}
+  .hero p{margin:2px 0 0;font-size:12.5px;color:var(--dim);}
+
+  .roles{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .rolecard{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;
+    padding:18px;border-radius:20px;border:2px solid var(--border);background:var(--card);color:var(--text);
+    transition:transform .1s, border-color .12s, box-shadow .12s;}
+  .rolecard:active{transform:scale(.97);}
+  .rolecard .ri{font-size:30px;}
+  .rolecard b{font-size:18px;font-weight:900;}
+  .rolecard small{font-size:11.5px;color:var(--dim);font-weight:600;}
+  .rolecard.active{border-color:var(--amber);box-shadow:0 0 0 4px rgba(255,184,77,.15),0 12px 28px rgba(0,0,0,.35);background:var(--card2);}
+
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:18px;
+    backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+    box-shadow:0 14px 36px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.06);}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .panel-head h3{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0;font-weight:800;}
+  .hud{display:flex;align-items:center;gap:8px;}
+  .pill{font-size:11px;font-weight:800;color:var(--dim);background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:6px 11px;white-space:nowrap;}
+
+  .btn{width:100%;padding:16px;font-size:17px;font-weight:900;border:0;border-radius:16px;margin-top:14px;letter-spacing:.03em;transition:transform .06s;}
+  .btn:active{transform:scale(.98);}
+  .btn.primary{background:linear-gradient(180deg,#ffd08a,var(--amber2));color:#2b1a04;box-shadow:0 10px 24px rgba(255,184,77,.3);}
+  .btn.go{background:linear-gradient(180deg,#5fe9c6,#1f9d7d);color:#06231a;box-shadow:0 10px 24px rgba(55,224,176,.3);}
+  .btn.ghost{background:transparent;border:2px solid var(--border);color:var(--dim);box-shadow:none;}
+
+  /* word prompt */
+  .prompt{text-align:center;padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--bg);}
+  .prompt .lab{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);font-weight:800;}
+  .prompt .word{font-size:30px;font-weight:900;margin:4px 0 2px;letter-spacing:-.01em;}
+  .prompt .cat{font-size:11.5px;color:var(--faint);}
+  .reshuffle{margin-top:10px;width:100%;padding:11px;border-radius:12px;border:2px solid var(--border);background:transparent;color:var(--dim);font-weight:800;font-size:13px;}
+
+  /* drawing pad */
+  .padwrap{margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:10px;}
+  #pad{width:min(84vw,420px);height:min(84vw,420px);border-radius:18px;background:#f6f4ee;touch-action:none;
+    box-shadow:0 10px 28px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.1);cursor:crosshair;}
+  .tools{display:flex;gap:10px;width:min(84vw,420px);}
+  .tools button{flex:1;padding:12px;border-radius:12px;border:2px solid var(--border);background:var(--card2);color:var(--dim);font-weight:800;font-size:13px;}
+  .tools button.on{border-color:var(--amber);color:var(--text);}
+
+  /* transmitter (casting) */
+  .transmitter{margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .tx-frame{position:relative;padding:14px;border-radius:22px;background:#0b0d13;border:1px solid var(--border);}
+  #bb{image-rendering:pixelated;width:min(72vw,340px);height:min(72vw,340px);background:#fff;border-radius:12px;display:block;}
+  .tx-caption{font-size:12px;color:var(--faint);text-align:center;}
+
+  .signal{width:14px;height:14px;border-radius:50%;background:#2a2e3c;transition:.1s;}
+  .signal.hit{background:var(--amber);box-shadow:0 0 12px var(--amber);}
+  #reveal{image-rendering:pixelated;width:min(78vw,360px);height:min(78vw,360px);background:#0a0b10;border-radius:16px;
+    border:1px solid var(--border);box-shadow:inset 0 2px 22px rgba(0,0,0,.55);display:block;margin:0 auto;}
+  .status{font-size:12.5px;color:var(--dim);min-height:16px;margin-top:10px;text-align:center;}
+  .result{font-size:17px;font-weight:900;text-align:center;padding:6px;min-height:8px;}
+  .win{color:var(--teal);} .lose{color:var(--red);}
+
+  .opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .optsHint{grid-column:1 / -1;text-align:center;font-size:12.5px;color:var(--faint);padding:12px 6px;}
+  .opt{padding:14px 10px;border-radius:15px;border:2px solid var(--border);background:var(--card2);color:var(--text);
+    font:inherit;font-size:14px;font-weight:800;line-height:1.25;text-align:center;cursor:pointer;
+    transition:transform .08s, border-color .12s, background .12s;}
+  .opt:active{transform:scale(.96);}
+  .opt:disabled{opacity:.55;}
+  .opt.correct{border-color:var(--teal);background:rgba(55,224,176,.16);color:var(--teal);opacity:1;}
+  .opt.wrong{border-color:var(--red);background:rgba(226,85,75,.2);color:var(--red);opacity:1;}
+
+  video{position:fixed;width:2px;height:2px;opacity:.01;pointer-events:none;top:0;left:0;}
+  canvas.work{display:none;}
+  .foot{text-align:center;font-size:10px;color:var(--faint);letter-spacing:.06em;padding:2px 0 6px;}
+
+  /* pre-scan: one clean tap */
+  #tapHint{display:none;text-align:center;}
+  .th-ico{font-size:46px;animation:pulse 1.8s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.12);opacity:1}}
+  .th-title{font-size:21px;font-weight:900;margin:12px 0 6px;}
+  .th-sub{font-size:13px;color:var(--dim);margin:0 auto;max-width:30ch;line-height:1.45;}
+  body.prescan .brand,body.prescan .hero,body.prescan .roles,body.prescan .foot,body.prescan #beaconCard{display:none;}
+  body.prescan .panel-head,body.prescan #reveal,body.prescan #answerWrap,body.prescan #result,body.prescan #newBtn,body.prescan .status{display:none;}
+  body.prescan #tapHint{display:block;}
+  body.prescan #playerCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:26px;box-shadow:none;
+    background:radial-gradient(900px 540px at 50% -6%, rgba(255,184,77,.14), var(--bg) 62%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;}
+  body.prescan #camBtn{max-width:300px;width:100%;font-size:18px;padding:20px;margin:0;}
+
+  /* immersive: drawer drawing */
+  body.drawing .brand,body.drawing .hero,body.drawing .roles,body.drawing .foot,body.drawing #playerCard{display:none;}
+  body.drawing #beaconCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:16px;box-shadow:none;overflow:auto;
+    background:radial-gradient(900px 540px at 50% -6%, rgba(255,184,77,.12), var(--bg) 62%);display:flex;flex-direction:column;align-items:center;}
+  body.drawing .panel-head{display:none;}
+
+  /* immersive: casting */
+  body.casting .brand,body.casting .hero,body.casting .roles,body.casting .foot,body.casting #playerCard,
+  body.casting .prompt,body.casting .padwrap,body.casting #drawTools,body.casting #beamBtn{display:none;}
+  body.casting #beaconCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:24px;box-shadow:none;
+    background:radial-gradient(900px 540px at 50% -8%, rgba(255,184,77,.14), var(--bg) 62%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}
+  body.casting #bb{width:min(82vw,440px);height:min(82vw,440px);}
+
+  /* immersive: player playing */
+  body.playing .brand,body.playing .hero,body.playing .roles,body.playing .foot,body.playing #beaconCard{display:none;}
+  body.playing #playerCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:22px;box-shadow:none;
+    background:radial-gradient(1000px 540px at 50% -8%, rgba(255,184,77,.1), var(--bg) 62%);display:flex;flex-direction:column;}
+  body.playing .panel-head,body.playing .status,body.playing #camBtn,body.playing #newBtn{display:none;}
+  body.playing #reveal{width:min(88vw,58vh);height:min(88vw,58vh);margin:auto;}
+  body.playing #answerWrap{margin:0;padding-top:14px;border-top:1px solid var(--border);display:block;}
+
+  /* win stage */
+  #stage{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1000px 640px at 50% 0%, rgba(255,184,77,.16), rgba(11,13,19,.97) 62%);}
+  #confetti{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+  .stage-inner{position:relative;display:flex;flex-direction:column;align-items:center;gap:12px;padding:26px;width:100%;max-width:380px;
+    animation:stagein .5s cubic-bezier(.22,1.2,.36,1);}
+  @keyframes stagein{from{transform:scale(.82);opacity:0;}to{transform:scale(1);opacity:1;}}
+  .stage-label{font-size:12px;font-weight:900;letter-spacing:.4em;text-transform:uppercase;color:var(--amber);}
+  .stage-score{font-size:78px;font-weight:900;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;
+    background:linear-gradient(180deg,#ffffff,#ffd08a);-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 10px 30px rgba(255,184,77,.25));}
+  .stage-pts{font-size:12px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);margin-top:-6px;}
+  .stage-sub{font-size:14px;color:var(--dim);}
+  .stage-home{font-size:13px;font-weight:700;color:var(--faint);text-decoration:none;padding:8px;}
+  #stage .btn{max-width:300px;width:100%;}
+</style>
+</head>
+<body>
+  <a class="brand" href="../">
+    <span class="logo">◇</span>
+    <h1>SIGNAL</h1>
+    <span class="back">‹ home</span>
+  </a>
+
+  <div class="hero">
+    <span class="emoji">✏️</span>
+    <div><h2>Draw</h2><p>Sketch it in light. Everyone guesses.</p></div>
+  </div>
+
+  <div class="roles">
+    <button id="roleBeacon" class="rolecard"><span class="ri">✏️</span><b>Drawer</b><small>draw &amp; beam it</small></button>
+    <button id="rolePlayer" class="rolecard"><span class="ri">🔍</span><b>Guesser</b><small>name the drawing</small></button>
+  </div>
+
+  <!-- DRAWER -->
+  <section id="beaconCard" class="panel hide">
+    <div class="panel-head"><h3>Drawer</h3><span class="pill" id="bcnStat" hidden></span></div>
+    <div class="prompt">
+      <div class="lab">Draw this</div>
+      <div class="word" id="drawWord">—</div>
+      <div class="cat" id="drawCat"></div>
+      <button class="reshuffle" id="reshuffle">🔀 Give me a different word</button>
+    </div>
+    <div class="padwrap">
+      <canvas id="pad" width="440" height="440"></canvas>
+      <div class="tools" id="drawTools">
+        <button id="thin" class="on">Thin</button>
+        <button id="thick">Thick</button>
+        <button id="clearPad">Clear</button>
+      </div>
+    </div>
+    <button id="beamBtn" class="btn primary">📡 Beam it to everyone</button>
+    <div class="transmitter">
+      <div class="tx-frame"><canvas id="bb" width="440" height="440"></canvas></div>
+      <div class="tx-caption">Guessers point their phones here</div>
+    </div>
+  </section>
+
+  <!-- GUESSER -->
+  <section id="playerCard" class="panel hide">
+    <div id="tapHint">
+      <div class="th-ico">📡</div>
+      <h3 class="th-title">Point at the drawer</h3>
+      <p class="th-sub">Their screen beams the sketch in light. Tap below, then aim your camera at it.</p>
+    </div>
+    <div class="panel-head">
+      <h3>Guesser</h3>
+      <div class="hud">
+        <span class="signal" id="dot"></span>
+        <span class="pill" id="pct">0%</span>
+      </div>
+    </div>
+    <canvas id="reveal" width="256" height="256"></canvas>
+    <div class="status" id="plStat">Tap Start, then aim at the drawer.</div>
+    <button id="camBtn" class="btn primary">Start</button>
+    <div id="answerWrap" class="hide" style="margin-top:12px">
+      <div class="opts" id="opts"><div class="optsHint">Choices appear once you lock on…</div></div>
+    </div>
+    <div id="result" class="result"></div>
+    <button id="newBtn" class="btn ghost">New game</button>
+  </section>
+
+  <div class="foot">light does the talking</div>
+
+  <!-- WIN STAGE -->
+  <div id="stage" class="hide">
+    <canvas id="confetti"></canvas>
+    <div class="stage-inner">
+      <div class="stage-label" id="stageLabel">Correct</div>
+      <div class="stage-score" id="stageScore">0</div>
+      <div class="stage-pts">points</div>
+      <div class="stage-sub" id="stageSub"></div>
+      <button id="stageNew" class="btn ghost">Play again</button>
+      <a class="stage-home" href="../">‹ home</a>
+    </div>
+  </div>
+
+  <video id="video" playsinline muted></video>
+  <canvas id="work" class="work"></canvas>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
