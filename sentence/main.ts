@@ -166,7 +166,7 @@ async function startBeacon(): Promise<void> {
   for (const rf of rowFrames) for (let k = 0; k < ROW_REPEAT; k++) playlist.push(rf);
 
   if (txTimer !== null) clearInterval(txTimer);
-  let idx = 0;
+  let playIdx = 0;
   let tick = 0;
   txTimer = window.setInterval(() => {
     if (tick % META_EVERY === 0) {
@@ -174,17 +174,17 @@ async function startBeacon(): Promise<void> {
       tick++;
       return;
     }
-    if (idx >= playlist.length) {
+    if (playIdx >= playlist.length) {
       renderFrame(endFrame);
       $("bcnStat").textContent = "Broadcast complete.";
       if (txTimer !== null) clearInterval(txTimer);
       txTimer = null;
       return;
     }
-    renderFrame(playlist[idx]!);
-    idx++;
+    renderFrame(playlist[playIdx]!);
+    playIdx++;
     tick++;
-    $("bcnStat").textContent = `Broadcasting… ${Math.round((idx / playlist.length) * 100)}%`;
+    $("bcnStat").textContent = `Broadcasting… ${Math.round((playIdx / playlist.length) * 100)}%`;
   }, 1000 / TX_FPS);
 
   const b = $<HTMLButtonElement>("bcnBtn");
