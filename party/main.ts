@@ -1,72 +1,111 @@
 // SIGNAL Party lobby — Supabase Realtime (presence + broadcast).
-// No database: a room is just a realtime channel keyed by its code. Presence
-// tracks who's in the room; broadcast carries ready/start (and later scores).
+// A room is just a realtime channel keyed by its code. No database.
 import QRCode from "qrcode";
 import { supabase, type PlayerMeta } from "../shared/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-// ---- room + identity ----
-const params = new URLSearchParams(location.search);
-let code = params.get("room");
-let isHost = false;
-if (!code) {
-  code = genCode();
-  isHost = true;
-  history.replaceState(null, "", `?room=${code}&host=1`);
-} else {
-  isHost = params.get("host") === "1";
+// UUID with a fallback — crypto.randomUUID throws on older mobile Safari, which
+// would kill the whole script and leave an unstyled shell.
+function uuid(): string {
+  const c = crypto as unknown as { randomUUID?: () => string };
+  if (typeof c.randomUUID === "function") return c.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
 }
-const playerId = crypto.randomUUID();
-let name = localStorage.getItem("signal_name") ?? "";
-let channel: RealtimeChannel | null = null;
-
 function genCode(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let s = "";
   for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
   return s;
 }
 
-// ---- name gate ----
-$("codeText").textContent = code;
-$("heroSub").textContent = isHost ? "Share the code — get everyone in." : `Joining room ${code}.`;
-$("nameGate").classList.remove("hide");
-$<HTMLInputElement>("nameInput").value = name;
-if (isHost) $("nameLabel").textContent = "You're the host — what's your name?";
+const playerId = uuid();
+let code = "";
+let isHost = false;
+let name = localStorage.getItem("signal_name") ?? "";
+let channel: RealtimeChannel | null = null;
 
-$<HTMLButtonElement>("joinBtn").onclick = () => void join();
-$<HTMLInputElement>("nameInput").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") void join();
+// ---- routing: ?room means we came from a QR/link → skip landing ----
+const params = new URLSearchParams(location.search);
+const roomParam = params.get("room");
+if (roomParam) {
+  code = roomParam.toUpperCase();
+  isHost = params.get("host") === "1";
+  showNameGate();
+} else {
+  showLanding();
+}
+
+function showLanding(): void {
+  $("landing").classList.remove("hide");
+  $("nameGate").classList.add("hide");
+  $("lobby").classList.add("hide");
+}
+function showNameGate(): void {
+  $("landing").classList.add("hide");
+  $("nameGate").classList.remove("hide");
+  $("lobby").classList.add("hide");
+  $<HTMLInputElement>("nameInput").value = name;
+  $("nameLabel").textContent = isHost ? "You're the host — what's your name?" : `Joining room ${code} — your name?`;
+  $("heroSub").textContent = isHost ? "Share the code — get everyone in." : `Joining room ${code}.`;
+}
+
+// ---- landing actions ----
+$<HTMLButtonElement>("createBtn").onclick = () => {
+  code = genCode();
+  isHost = true;
+  history.replaceState(null, "", `?room=${code}&host=1`);
+  showNameGate();
+};
+$<HTMLButtonElement>("codeJoinBtn").onclick = () => {
+  const c = $<HTMLInputElement>("codeInput").value.trim().toUpperCase();
+  if (c.length < 3) {
+    $("landingStatus").textContent = "Enter the room code (e.g. PLUM).";
+    return;
+  }
+  code = c;
+  isHost = false;
+  history.replaceState(null, "", `?room=${code}`);
+  showNameGate();
+};
+$<HTMLInputElement>("codeInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $<HTMLButtonElement>("codeJoinBtn").click();
 });
 
-async function join(): Promise<void> {
+// ---- name gate ----
+$<HTMLButtonElement>("joinBtn").onclick = () => void enterLobby();
+$<HTMLInputElement>("nameInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") void enterLobby();
+});
+
+async function enterLobby(): Promise<void> {
   const n = $<HTMLInputElement>("nameInput").value.trim();
   if (!n) {
-    $("gateStatus").textContent = "Enter a name to join.";
+    $("gateStatus").textContent = "Enter a name to continue.";
     return;
   }
   name = n;
   localStorage.setItem("signal_name", name);
   $("nameGate").classList.add("hide");
   $("lobby").classList.remove("hide");
+  $("codeText").textContent = code;
   await connect();
 }
 
 // ---- realtime ----
 async function connect(): Promise<void> {
-  // Join QR points at the plain room URL (no host flag → joiners are players).
   const joinUrl = `${location.origin}${location.pathname}?room=${code}`;
   QRCode.toCanvas($("qr"), joinUrl, { width: 220, margin: 1, color: { dark: "#0f1118", light: "#ffffff" } }, () => {});
 
   channel = supabase.channel(`room:${code}`, { config: { presence: { key: playerId } } });
-
   channel.on("presence", { event: "sync" }, renderRoster);
   channel.on("broadcast", { event: "start" }, () => {
     $("lobbyStatus").textContent = "🎮 Everyone's ready! (game launch wires in next.)";
   });
-
   channel.subscribe(async (status) => {
     if (status === "SUBSCRIBED") {
       const meta: PlayerMeta = { id: playerId, name, host: isHost, score: 0, ready: false, beacon: false };
@@ -74,7 +113,7 @@ async function connect(): Promise<void> {
       if (isHost) $("readyBtn").classList.remove("hide");
       $("lobbyStatus").textContent = isHost ? "Waiting for players…" : "You're in! Waiting for the host to start.";
     } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-      $("lobbyStatus").textContent = "Connection problem — check the network and refresh.";
+      $("lobbyStatus").textContent = "Connection problem — check your network and refresh.";
     }
   });
 }
@@ -97,16 +136,8 @@ function renderRoster(): void {
     nm.className = "nm";
     nm.textContent = p.name + (p.id === playerId ? " (you)" : "");
     const tag = document.createElement("div");
-    if (p.host) {
-      tag.className = "tag";
-      tag.textContent = "host";
-    } else if (p.ready) {
-      tag.className = "tag ready";
-      tag.textContent = "ready";
-    } else {
-      tag.className = "tag";
-      tag.textContent = "";
-    }
+    tag.className = p.ready && !p.host ? "tag ready" : "tag";
+    tag.textContent = p.host ? "host" : p.ready ? "ready" : "";
     row.append(av, nm, tag);
     roster.appendChild(row);
   }
