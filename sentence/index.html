@@ -24,6 +24,7 @@
   .brand{display:flex;align-items:center;gap:10px;padding:2px 2px 0;}
   .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#1f8f74);
     display:grid;place-items:center;color:#04150f;font-weight:900;box-shadow:0 0 18px rgba(55,224,176,.35);}
+  .brand{text-decoration:none;color:inherit;}
   .brand h1{font-size:17px;letter-spacing:.14em;margin:0;font-weight:800;}
   .brand .tag{margin-left:auto;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);}
 
@@ -121,11 +122,11 @@
 </style>
 </head>
 <body>
-  <header class="brand">
-    <span class="logo">◉</span>
+  <a class="brand" href="../hub/">
+    <span class="logo">◇</span>
     <h1>SIGNAL</h1>
-    <span class="tag">optical party game</span>
-  </header>
+    <span class="tag">‹ home</span>
+  </a>
 
   <div class="seg" role="tablist">
     <button id="roleBeacon">Beacon</button>
@@ -134,10 +135,10 @@
 
   <!-- BEACON -->
   <section id="beaconCard" class="panel hide">
-    <div class="panel-head"><h2>Broadcast Console</h2><span class="pill" id="bcnStat">Idle</span></div>
+    <div class="panel-head"><h2>Beacon</h2><span class="pill" id="bcnStat">Idle</span></div>
     <label>Choose a phrase</label>
     <select id="puzzle"></select>
-    <button id="bcnBtn" class="btn primary">Start broadcasting</button>
+    <button id="bcnBtn" class="btn primary">Start</button>
     <div class="transmitter">
       <div class="tx-frame"><canvas id="bb" width="440" height="440"></canvas></div>
       <div class="tx-caption">Players point their phones here</div>
@@ -147,7 +148,7 @@
   <!-- PLAYER -->
   <section id="playerCard" class="panel hide">
     <div class="panel-head">
-      <h2>Decoder</h2>
+      <h2>Player</h2>
       <div class="hud">
         <span class="signal" id="dot"></span>
         <span class="pill" id="count">0% revealed</span>

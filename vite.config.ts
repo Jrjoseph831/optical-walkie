@@ -187,6 +187,7 @@ export default defineConfig(({ mode }) => {
           walkie: resolve(__dirname, "walkie/index.html"),
           fragments: resolve(__dirname, "fragments/index.html"),
           sentence: resolve(__dirname, "sentence/index.html"),
+          hub: resolve(__dirname, "hub/index.html"),
         },
       },
     },

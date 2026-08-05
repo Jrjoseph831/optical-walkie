@@ -217,7 +217,7 @@ async function startBeacon(): Promise<void> {
   }, 1000 / TX_FPS);
 
   const b = $<HTMLButtonElement>("bcnBtn");
-  b.textContent = "Stop broadcasting";
+  b.textContent = "Stop";
   b.classList.add("stop");
   b.dataset.on = "1";
   document.body.classList.add("casting");
@@ -228,7 +228,7 @@ function stopBeacon(): void {
   txTimer = null;
   document.body.classList.remove("casting");
   const b = $<HTMLButtonElement>("bcnBtn");
-  b.textContent = "Start broadcasting";
+  b.textContent = "Start";
   b.classList.remove("stop");
   b.dataset.on = "";
 }
