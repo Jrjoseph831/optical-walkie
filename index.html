@@ -3,88 +3,186 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0f1118" />
+<meta name="theme-color" content="#0b0d13" />
 <title>SIGNAL — optical party games</title>
-<meta name="description" content="Optical party games — no accounts, no network, light only." />
+<meta name="description" content="Optical party games — beam light, guess fast, climb the board." />
 <style>
   :root{
-    --bg:#0f1118; --bg2:#0b0d13; --text:#f3f5fb; --dim:#9aa0b4;
-    --blue:#4f8cff; --pink:#ff5c8a; --teal:#37e0b0; --amber:#ffb84d; --violet:#9b7bff;
+    --bg:#0b0d13; --text:#f4f6fb; --dim:#a2a8bc; --faint:#6b7186;
+    --glass:rgba(255,255,255,.045); --glass2:rgba(255,255,255,.08);
+    --stroke:rgba(255,255,255,.08); --stroke2:rgba(255,255,255,.16);
+    --blue:#4f8cff; --pink:#ff5c8a; --teal:#37e0b0; --violet:#9b7bff; --gold:#ffb84d;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;min-height:100%;}
   body{
     background:
-      radial-gradient(900px 500px at 15% -10%, rgba(79,140,255,.18), transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, rgba(255,92,138,.16), transparent 55%),
+      radial-gradient(1100px 560px at 18% -12%, rgba(55,224,176,.10), transparent 62%),
+      radial-gradient(900px 520px at 100% -4%, rgba(155,123,255,.09), transparent 58%),
       var(--bg);
     color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
-    padding:22px 18px 30px;max-width:620px;margin:0 auto;min-height:100vh;
+    padding:calc(18px + env(safe-area-inset-top)) 18px 30px;max-width:620px;margin:0 auto;min-height:100vh;
     display:flex;flex-direction:column;
+    -webkit-font-smoothing:antialiased;
   }
-  .top{display:flex;align-items:center;gap:12px;margin-bottom:22px;}
-  .mark{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-size:22px;font-weight:900;color:#08131f;
-    background:linear-gradient(135deg,var(--teal),#1f9d7d);box-shadow:0 8px 22px rgba(55,224,176,.35);}
-  .title{font-size:26px;font-weight:900;letter-spacing:.02em;margin:0;}
-  .title small{display:block;font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);margin-top:3px;}
-  .lead{font-size:13px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin:0 2px 12px;}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-  .tile{position:relative;display:flex;flex-direction:column;justify-content:space-between;
-    aspect-ratio:1/1;border-radius:24px;padding:18px;text-decoration:none;color:#0b0f1a;
-    box-shadow:0 12px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.35);
-    transition:transform .12s ease; overflow:hidden;}
-  .tile:active{transform:scale(.965);}
-  .tile .ico{font-size:46px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.25));}
-  .tile .name{font-size:22px;font-weight:900;}
-  .tile .desc{font-size:12.5px;font-weight:600;opacity:.72;margin-top:2px;}
-  .tile::after{content:"";position:absolute;right:-30px;top:-30px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.22);}
-  .t-walkie{background:linear-gradient(155deg,#7db0ff,var(--blue));}
-  .t-reveal{background:linear-gradient(155deg,#ff8fb0,var(--pink));}
-  .t-phrase{background:linear-gradient(155deg,#69ecc6,var(--teal));}
-  .t-party{background:linear-gradient(155deg,#b49dff,var(--violet));color:#120a24;}
-  .t-soon{background:linear-gradient(155deg,#3a3f52,#2a2e3d);color:#8b90a3;box-shadow:0 8px 20px rgba(0,0,0,.3);pointer-events:none;}
-  .t-soon .lock{position:absolute;top:16px;right:16px;font-size:16px;opacity:.8;}
-  .party-wide{grid-column:1 / -1;aspect-ratio:auto;flex-direction:row;align-items:center;gap:16px;padding:20px 22px;}
-  .party-wide .ico{font-size:40px;}
-  .foot{margin-top:auto;padding-top:24px;text-align:center;color:#5b6072;font-size:11px;letter-spacing:.08em;}
-  .foot b{color:var(--dim);font-weight:700;}
+
+  /* top bar */
+  .top{display:flex;align-items:center;gap:11px;margin-bottom:26px;}
+  .mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:18px;font-weight:900;color:#06231a;
+    background:linear-gradient(135deg,#69ecc6,#1f9d7d);box-shadow:0 8px 20px rgba(55,224,176,.28), inset 0 1px 0 rgba(255,255,255,.4);}
+  .word{font-size:15px;font-weight:800;letter-spacing:.24em;}
+  .chip{margin-left:auto;display:flex;align-items:center;gap:8px;padding:7px 13px 7px 8px;border-radius:999px;
+    background:var(--glass);border:1px solid var(--stroke);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    color:var(--text);font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:transform .1s, border-color .15s;}
+  .chip:active{transform:scale(.96);}
+  .chip .cav{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:15px;background:var(--glass2);}
+  .chip .cname{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .chip.unset .cname{color:var(--dim);}
+
+  /* greeting */
+  .greet{margin:0 2px 20px;}
+  .greet h2{margin:0;font-size:31px;font-weight:800;letter-spacing:-.02em;line-height:1.15;}
+  .greet p{margin:6px 0 0;font-size:13.5px;color:var(--dim);font-weight:500;}
+  .greet p b{color:var(--gold);font-weight:800;}
+
+  /* cards */
+  .stack{display:flex;flex-direction:column;gap:13px;}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+  .card{position:relative;display:flex;text-decoration:none;color:var(--text);border-radius:26px;overflow:hidden;
+    background:var(--glass);border:1px solid var(--stroke);
+    backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+    box-shadow:0 14px 36px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.06);
+    transition:transform .12s ease;}
+  .card:active{transform:scale(.975);}
+
+  .hero{flex-direction:column;gap:2px;padding:22px 22px 20px;border:1px solid rgba(105,236,198,.22);
+    background:linear-gradient(160deg, rgba(55,224,176,.16), rgba(55,224,176,.045) 55%), var(--glass);}
+  .hero .kicker{font-size:11px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#6fe9c8;}
+  .hero .h-row{display:flex;align-items:center;gap:14px;margin-top:8px;}
+  .hero .h-name{font-size:27px;font-weight:900;letter-spacing:-.01em;}
+  .hero .h-desc{font-size:13px;color:var(--dim);margin-top:3px;max-width:34ch;}
+  .hero .play{margin-left:auto;width:54px;height:54px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;font-size:20px;color:#06231a;
+    background:linear-gradient(180deg,#69ecc6,#1f9d7d);box-shadow:0 10px 26px rgba(55,224,176,.35), inset 0 1px 0 rgba(255,255,255,.45);}
+
+  .wide{align-items:center;gap:15px;padding:18px 20px;}
+  .wide .ico{width:48px;height:48px;flex:0 0 auto;border-radius:15px;display:grid;place-items:center;font-size:24px;background:var(--glass2);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.1);}
+  .wide .t{font-size:17px;font-weight:800;}
+  .wide .d{font-size:12.5px;color:var(--dim);margin-top:1px;}
+  .wide .chev{margin-left:auto;color:var(--faint);font-size:18px;font-weight:700;}
+  .wide.party{border-color:rgba(155,123,255,.24);
+    background:linear-gradient(160deg, rgba(155,123,255,.15), rgba(155,123,255,.04) 60%), var(--glass);}
+  .wide.party .ico{background:linear-gradient(135deg,#b49dff,#7b5bff);color:#120a24;}
+  .wide.board .ico{background:linear-gradient(135deg,#ffd08a,#e09a2f);color:#2b1a04;}
+
+  .mini{flex-direction:column;gap:10px;padding:18px;min-height:128px;justify-content:flex-end;}
+  .mini .ico{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-size:22px;position:absolute;top:16px;left:16px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.14);}
+  .mini .t{font-size:16.5px;font-weight:800;}
+  .mini .d{font-size:12px;color:var(--dim);margin-top:1px;}
+  .mini.reveal{border-color:rgba(255,92,138,.2);background:linear-gradient(165deg, rgba(255,92,138,.13), rgba(255,92,138,.03) 60%), var(--glass);}
+  .mini.reveal .ico{background:linear-gradient(135deg,#ff8fb0,#e5416f);}
+  .mini.walkie{border-color:rgba(79,140,255,.2);background:linear-gradient(165deg, rgba(79,140,255,.13), rgba(79,140,255,.03) 60%), var(--glass);}
+  .mini.walkie .ico{background:linear-gradient(135deg,#7db0ff,#2f6fe0);}
+
+  .lead{font-size:11.5px;color:var(--faint);letter-spacing:.18em;text-transform:uppercase;font-weight:800;margin:22px 4px 11px;}
+  .foot{margin-top:auto;padding-top:26px;text-align:center;color:#565b6e;font-size:11px;letter-spacing:.08em;}
+
+  /* profile sheet */
+  .scrim{position:fixed;inset:0;background:rgba(5,6,10,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    opacity:0;pointer-events:none;transition:opacity .22s;z-index:40;}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;max-width:620px;margin:0 auto;
+    background:#121522f2;border:1px solid var(--stroke2);border-bottom:0;border-radius:26px 26px 0 0;
+    padding:14px 22px calc(24px + env(safe-area-inset-bottom));
+    transform:translateY(105%);transition:transform .28s cubic-bezier(.32,.72,.26,1);
+    box-shadow:0 -20px 60px rgba(0,0,0,.5);}
+  body.sheet-open .scrim{opacity:1;pointer-events:auto;}
+  body.sheet-open .sheet{transform:translateY(0);}
+  .grab{width:38px;height:4px;border-radius:2px;background:var(--stroke2);margin:0 auto 16px;}
+  .sheet h3{margin:0 0 3px;font-size:20px;font-weight:800;letter-spacing:-.01em;}
+  .sheet .sub{margin:0 0 16px;font-size:12.5px;color:var(--dim);}
+  .avgrid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:16px;}
+  .avgrid button{aspect-ratio:1;border-radius:13px;border:2px solid transparent;background:var(--glass2);font-size:20px;
+    display:grid;place-items:center;cursor:pointer;transition:transform .08s, border-color .12s;}
+  .avgrid button:active{transform:scale(.9);}
+  .avgrid button.sel{border-color:var(--teal);background:rgba(55,224,176,.14);}
+  .sheet label{display:block;font-size:12px;color:var(--dim);margin:0 0 7px;font-weight:600;}
+  .sheet input{width:100%;background:rgba(0,0,0,.28);color:var(--text);border:2px solid var(--stroke2);border-radius:14px;padding:14px;font-size:17px;font-weight:600;}
+  .sheet input:focus{outline:none;border-color:var(--teal);}
+  .sheet .save{width:100%;padding:16px;font-size:16px;font-weight:900;border:0;border-radius:16px;margin-top:16px;letter-spacing:.02em;cursor:pointer;
+    background:linear-gradient(180deg,#69ecc6,#1f9d7d);color:#06231a;box-shadow:0 10px 24px rgba(55,224,176,.28);transition:transform .06s;}
+  .sheet .save:active{transform:scale(.98);}
 </style>
 </head>
 <body>
   <div class="top">
     <div class="mark">◇</div>
-    <h1 class="title">SIGNAL<small>optical party games</small></h1>
+    <div class="word">SIGNAL</div>
+    <button class="chip unset" id="chip">
+      <span class="cav" id="chipAv">🦊</span>
+      <span class="cname" id="chipName">Set name</span>
+    </button>
   </div>
 
-  <p class="lead">Play together</p>
-  <div class="grid">
-    <a class="tile t-party party-wide" href="party/">
+  <div class="greet">
+    <h2 id="greetH">Ready to play?</h2>
+    <p id="greetP">Beam a phrase in light. Claim your name. Climb the board.</p>
+  </div>
+
+  <div class="stack">
+    <a class="card hero" href="sentence/">
+      <span class="kicker">Solo run</span>
+      <span class="h-row">
+        <span>
+          <span class="h-name">Phrase</span>
+          <span class="h-desc" style="display:block">Beam it from any screen. Guess it before it fills in.</span>
+        </span>
+        <span class="play">▶</span>
+      </span>
+    </a>
+
+    <a class="card wide party" href="party/">
       <span class="ico">🎉</span>
-      <span><span class="name">Party up</span><span class="desc">a room with names &amp; scores</span></span>
+      <span><span class="t" style="display:block">Party up</span><span class="d" style="display:block">a live room with names &amp; scores — no sign-in</span></span>
+      <span class="chev">›</span>
     </a>
   </div>
 
-  <p class="lead" style="margin-top:16px">Pick a game</p>
-  <div class="grid">
-    <a class="tile t-walkie" href="walkie/">
-      <span class="ico">💬</span>
-      <span><span class="name">Walkie</span><span class="desc">talk phone-to-phone in light</span></span>
-    </a>
-    <a class="tile t-reveal" href="fragments/">
+  <p class="lead">More games</p>
+  <div class="duo">
+    <a class="card mini reveal" href="fragments/">
       <span class="ico">🖼️</span>
-      <span><span class="name">Reveal</span><span class="desc">guess the mystery image</span></span>
+      <span><span class="t" style="display:block">Reveal</span><span class="d" style="display:block">guess the mystery image</span></span>
     </a>
-    <a class="tile t-phrase" href="sentence/">
-      <span class="ico">🔤</span>
-      <span><span class="name">Phrase</span><span class="desc">read it before it fills in</span></span>
+    <a class="card mini walkie" href="walkie/">
+      <span class="ico">💬</span>
+      <span><span class="t" style="display:block">Walkie</span><span class="d" style="display:block">talk phone-to-phone in light</span></span>
     </a>
-    <span class="tile t-soon">
-      <span class="lock">🔒</span>
-      <span class="ico">🎭</span>
-      <span><span class="name">More</span><span class="desc">coming soon</span></span>
-    </span>
   </div>
 
-  <div class="foot"><b>no accounts · no network · light only</b></div>
+  <p class="lead">Compete</p>
+  <div class="stack">
+    <a class="card wide board" href="leaderboard/">
+      <span class="ico">🏆</span>
+      <span><span class="t" style="display:block">Leaderboard</span><span class="d" style="display:block">the best solo runs, worldwide</span></span>
+      <span class="chev">›</span>
+    </a>
+  </div>
+
+  <div class="foot">light does the talking</div>
+
+  <!-- profile sheet -->
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <h3>Your player</h3>
+    <p class="sub">One name, no passwords — it rides with this device.</p>
+    <div class="avgrid" id="avgrid"></div>
+    <label>Player name</label>
+    <input id="pname" placeholder="Your name" maxlength="16" autocapitalize="words" autocomplete="off" />
+    <button class="save" id="psave">Save</button>
+  </div>
+
+  <script type="module" src="./home.ts"></script>
 </body>
 </html>

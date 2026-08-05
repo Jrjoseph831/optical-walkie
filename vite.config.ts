@@ -130,9 +130,9 @@ export default defineConfig(({ mode }) => {
           name: "SIGNAL — optical party games",
           short_name: "SIGNAL",
           description:
-            "Optical party games — no accounts, no network, light only.",
-          theme_color: "#0f1118",
-          background_color: "#0f1118",
+            "Optical party games — beam light, guess fast, climb the board.",
+          theme_color: "#0b0d13",
+          background_color: "#0b0d13",
           display: "standalone",
           start_url: "./",
           // Real icons, not the demo payload image this once pointed at. The
@@ -188,6 +188,7 @@ export default defineConfig(({ mode }) => {
           fragments: resolve(__dirname, "fragments/index.html"),
           sentence: resolve(__dirname, "sentence/index.html"),
           party: resolve(__dirname, "party/index.html"),
+          leaderboard: resolve(__dirname, "leaderboard/index.html"),
         },
       },
     },

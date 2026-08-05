@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#0f1118" />
+<meta name="theme-color" content="#0b0d13" />
 <title>Phrase — SIGNAL</title>
 <style>
   :root{
-    --bg:#0f1118; --card:#171a24; --card2:#1d212e; --border:#272c3b;
-    --text:#f3f5fb; --dim:#9aa0b4; --faint:#666c80;
+    --bg:#0b0d13; --card:rgba(255,255,255,.045); --card2:rgba(255,255,255,.08); --border:rgba(255,255,255,.09);
+    --text:#f4f6fb; --dim:#a2a8bc; --faint:#6b7186;
     --teal:#37e0b0; --teal2:#1f9d7d; --gold:#ffb84d; --red:#e2554b;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -42,7 +42,9 @@
   .rolecard small{font-size:11.5px;color:var(--dim);font-weight:600;}
   .rolecard.active{border-color:var(--teal);box-shadow:0 0 0 4px rgba(55,224,176,.15),0 12px 28px rgba(0,0,0,.35);background:var(--card2);}
 
-  .panel{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.32);}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:18px;
+    backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+    box-shadow:0 14px 36px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.06);}
   .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
   .panel-head h3{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0;font-weight:800;}
   .hud{display:flex;align-items:center;gap:8px;}
@@ -103,6 +105,27 @@
   body.result #result{font-size:26px;line-height:1.45;max-width:340px;}
   body.result #newBtn{display:block;max-width:240px;margin:0;}
 
+  /* ---------- win stage: the loud moment ---------- */
+  #stage{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(1000px 640px at 50% 0%, rgba(55,224,176,.16), rgba(11,13,19,.97) 62%);}
+  #confetti{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+  .stage-inner{position:relative;display:flex;flex-direction:column;align-items:center;gap:12px;padding:26px;width:100%;max-width:380px;
+    animation:stagein .5s cubic-bezier(.22,1.2,.36,1);}
+  @keyframes stagein{from{transform:scale(.82);opacity:0;}to{transform:scale(1);opacity:1;}}
+  .stage-label{font-size:12px;font-weight:900;letter-spacing:.4em;text-transform:uppercase;color:#6fe9c8;}
+  .stage-score{font-size:78px;font-weight:900;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;
+    background:linear-gradient(180deg,#ffffff,#8fe9cd);-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 10px 30px rgba(55,224,176,.25));}
+  .stage-pts{font-size:12px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);margin-top:-6px;}
+  .stage-sub{font-size:14px;color:var(--dim);}
+  .stage-badge{font-size:12px;font-weight:900;letter-spacing:.06em;color:#2b1a04;padding:7px 14px;border-radius:999px;
+    background:linear-gradient(180deg,#ffd08a,#e09a2f);box-shadow:0 8px 20px rgba(255,184,77,.3);}
+  .stage-board{min-height:20px;font-size:13.5px;font-weight:600;color:var(--dim);text-align:center;}
+  #claimWrap{width:100%;display:flex;flex-direction:column;gap:0;}
+  #claimWrap label{text-align:center;margin-top:4px;}
+  #stage .btn{max-width:300px;width:100%;}
+  .stage-home{font-size:13px;font-weight:700;color:var(--faint);text-decoration:none;padding:8px;}
+
   body.casting .brand,body.casting .hero,body.casting .roles,body.casting .foot,body.casting #playerCard{display:none;}
   body.casting #beaconCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:24px;box-shadow:none;
     background:radial-gradient(900px 540px at 50% -8%, rgba(55,224,176,.14), var(--bg) 62%);
@@ -161,7 +184,27 @@
     <button id="newBtn" class="btn ghost">New game</button>
   </section>
 
-  <div class="foot">no accounts · no network · light only</div>
+  <div class="foot">light does the talking</div>
+
+  <!-- WIN STAGE -->
+  <div id="stage" class="hide">
+    <canvas id="confetti"></canvas>
+    <div class="stage-inner">
+      <div class="stage-label">Solved</div>
+      <div class="stage-score" id="stageScore">0</div>
+      <div class="stage-pts">points</div>
+      <div class="stage-sub" id="stageSub"></div>
+      <div class="stage-badge hide" id="stageBest">★ &nbsp;New personal best</div>
+      <div class="stage-board" id="stageBoard"></div>
+      <div id="claimWrap" class="hide">
+        <label>Claim this run with a player name</label>
+        <input id="claimName" placeholder="Your name" maxlength="16" autocapitalize="words" autocomplete="off" />
+        <button id="claimBtn" class="btn primary">Post to the board</button>
+      </div>
+      <button id="stageNew" class="btn ghost">Play again</button>
+      <a class="stage-home" href="../">‹ home</a>
+    </div>
+  </div>
 
   <video id="video" playsinline muted></video>
   <canvas id="work" class="work"></canvas>

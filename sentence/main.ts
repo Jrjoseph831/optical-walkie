@@ -11,6 +11,8 @@ import wasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
 import { LTEncoder, LTDecoder } from "../shared/fountain";
 import { packFrame, parseFrame, streamIdentity, fnv1a, type FrameHeader } from "../shared/protocol";
 import { rasterizeQr } from "../shared/qr-raster";
+import { submitRun } from "../shared/leaderboard";
+import { recordRun, myName, setName } from "../shared/profile";
 
 prepareZXingModule({
   overrides: {
@@ -75,12 +77,15 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 // Party mode: launched from the lobby with ?room=CODE&role=beacon|player.
+// Party rooms keep their own score; solo runs post to the global board.
 const partyParams = new URLSearchParams(location.search);
 const partyRoom = partyParams.get("room");
 const partyRole = partyParams.get("role");
-function addScore(room: string, pts: number): void {
+function addScore(room: string, pts: number): number {
   const k = `signal_score_${room}`;
-  localStorage.setItem(k, String(Number(localStorage.getItem(k) || 0) + pts));
+  const total = Number(localStorage.getItem(k) || 0) + pts;
+  localStorage.setItem(k, String(total));
+  return total;
 }
 
 const PHRASES: string[] = [
@@ -486,13 +491,119 @@ $<HTMLButtonElement>("guessBtn").onclick = async () => {
     solved = true;
     const frac = totalTiles ? knownCount / totalTiles : 1;
     const score = Math.max(50, Math.round((1 - frac) * 1000));
-    if (partyRoom) addScore(partyRoom, score);
-    $("result").innerHTML = `<span class="win">🎉 Correct!<br />Guessed at ${Math.round(frac * 100)}% revealed<br />${score} pts</span>`;
     $("answerWrap").classList.add("hide");
-    document.body.classList.add("result");
     endRound();
+    showWinStage(score, frac);
   } else {
     $("result").innerHTML = `<span class="lose">❌ Not quite — try again</span>`;
+  }
+};
+
+// ---------- win stage: the loud moment ----------
+let stageScoreValue = 0;
+
+function countUp(el: HTMLElement, to: number, ms = 1100): void {
+  const t0 = performance.now();
+  const step = (t: number) => {
+    const k = Math.min(1, (t - t0) / ms);
+    const eased = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(to * eased).toLocaleString();
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function launchConfetti(): void {
+  const cv = $<HTMLCanvasElement>("confetti");
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  cv.width = cv.clientWidth * dpr;
+  cv.height = cv.clientHeight * dpr;
+  const ctx = cv.getContext("2d");
+  if (!ctx) return;
+  const colors = ["#37e0b0", "#ffb84d", "#ff5c8a", "#4f8cff", "#9b7bff", "#ffffff"];
+  const parts = Array.from({ length: 130 }, () => ({
+    x: cv.width * (0.5 + (Math.random() - 0.5) * 0.35),
+    y: cv.height * 0.38,
+    vx: (Math.random() - 0.5) * 16 * dpr,
+    vy: (-10 - Math.random() * 14) * dpr,
+    w: (4 + Math.random() * 5) * dpr,
+    h: (7 + Math.random() * 7) * dpr,
+    rot: Math.random() * Math.PI,
+    vr: (Math.random() - 0.5) * 0.3,
+    c: colors[(Math.random() * colors.length) | 0]!,
+  }));
+  const g = 0.55 * dpr;
+  let frames = 0;
+  const tick = () => {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for (const p of parts) {
+      p.vy += g;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.985;
+      p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.c;
+      ctx.globalAlpha = Math.max(0, 1 - frames / 170);
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    frames++;
+    if (frames < 175) requestAnimationFrame(tick);
+    else ctx.clearRect(0, 0, cv.width, cv.height);
+  };
+  requestAnimationFrame(tick);
+}
+
+async function postRun(score: number): Promise<void> {
+  $("stageBoard").textContent = "Posting to the board…";
+  const { ok, rank } = await submitRun("sentence", score);
+  $("stageBoard").textContent = ok
+    ? rank
+      ? `🏆 On the board — #${rank} run worldwide`
+      : "🏆 On the board"
+    : "Saved on this device — the board is offline right now.";
+}
+
+function showWinStage(score: number, frac: number): void {
+  stageScoreValue = score;
+  $("stage").classList.remove("hide");
+  $("stageSub").textContent = `guessed at just ${Math.round(frac * 100)}% revealed`;
+  $("stageBoard").textContent = "";
+  countUp($("stageScore"), score);
+  requestAnimationFrame(launchConfetti);
+  const best = recordRun("sentence", score);
+  $("stageBest").classList.toggle("hide", !best);
+  if (partyRoom) {
+    const total = addScore(partyRoom, score);
+    $("stageBoard").textContent = `+${score} pts → room total ${total.toLocaleString()}`;
+    $("stageNew").textContent = "‹ Back to lobby";
+  } else if (myName()) {
+    void postRun(score);
+  } else {
+    $("claimWrap").classList.remove("hide");
+  }
+}
+
+$<HTMLButtonElement>("claimBtn").onclick = () => {
+  const n = $<HTMLInputElement>("claimName").value.trim();
+  if (!n) return;
+  setName(n);
+  $("claimWrap").classList.add("hide");
+  void postRun(stageScoreValue);
+};
+$<HTMLInputElement>("claimName").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $<HTMLButtonElement>("claimBtn").click();
+});
+
+$<HTMLButtonElement>("stageNew").onclick = () => {
+  if (partyRoom) {
+    location.href = `../party/?room=${partyRoom}`;
+  } else {
+    $("stage").classList.add("hide");
+    resetGame();
   }
 };
 
@@ -514,6 +625,7 @@ function resetGame(): void {
   $("timer").textContent = fmtTime(elapsed);
   $("count").textContent = "0% revealed";
   $("result").innerHTML = "";
+  $("stage").classList.add("hide");
   $<HTMLInputElement>("guess").value = "";
   $("words").textContent = scanning ? "Locking onto the beacon…" : "Start scanning and aim at the beacon.";
   $("answerWrap").classList.toggle("hide", !scanning);

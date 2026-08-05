@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#0f1118" />
+<meta name="theme-color" content="#0b0d13" />
 <title>Reveal — SIGNAL</title>
 <style>
   :root{
-    --bg:#0f1118; --card:#171a24; --card2:#1d212e; --border:#272c3b;
-    --text:#f3f5fb; --dim:#9aa0b4; --faint:#666c80;
+    --bg:#0b0d13; --card:rgba(255,255,255,.045); --card2:rgba(255,255,255,.08); --border:rgba(255,255,255,.09);
+    --text:#f4f6fb; --dim:#a2a8bc; --faint:#6b7186;
     --accent:#ff5c8a; --accent2:#e6416f; --gold:#ffb84d; --red:#e2554b;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -41,7 +41,9 @@
   .rolecard small{font-size:11.5px;color:var(--dim);font-weight:600;}
   .rolecard.active{border-color:var(--accent);box-shadow:0 0 0 4px rgba(255,92,138,.15),0 12px 28px rgba(0,0,0,.35);background:var(--card2);}
 
-  .panel{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.32);}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:18px;
+    backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+    box-shadow:0 14px 36px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.06);}
   .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
   .panel-head h3{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0;font-weight:800;}
   .hud{display:flex;align-items:center;gap:8px;}

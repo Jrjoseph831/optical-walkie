@@ -4,30 +4,9 @@
 // realtime channel; presence carries each player's live score (no database).
 import { supabase, type PlayerMeta } from "./supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { myId } from "./profile";
 
-function uuid(): string {
-  const c = crypto as unknown as { randomUUID?: () => string };
-  if (typeof c.randomUUID === "function") return c.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
-    const r = (Math.random() * 16) | 0;
-    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
-export function myId(): string {
-  let id = localStorage.getItem("signal_pid");
-  if (!id) {
-    id = uuid();
-    localStorage.setItem("signal_pid", id);
-  }
-  return id;
-}
-export function myName(): string {
-  return localStorage.getItem("signal_name") ?? "";
-}
-export function setName(n: string): void {
-  localStorage.setItem("signal_name", n);
-}
+export { myId, myName, setName } from "./profile";
 
 const scoreKey = (room: string) => `signal_score_${room}`;
 export function getScore(room: string): number {
