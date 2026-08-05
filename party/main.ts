@@ -16,6 +16,7 @@ let code = "";
 let isHost = false;
 let name = myName();
 let channel: RealtimeChannel | null = null;
+let roster: PlayerMeta[] = [];
 
 const params = new URLSearchParams(location.search);
 const roomParam = params.get("room");
@@ -90,9 +91,9 @@ function connect(): void {
   channel = r.channel;
 
   channel.on("broadcast", { event: "launch" }, ({ payload }) => {
-    const p = payload as { game: string; beaconId: string };
-    const role = p.beaconId === myId() ? "beacon" : "player";
-    location.href = `../${p.game}/?room=${code}&role=${role}`;
+    const p = payload as { game: string; beaconIds: string[]; seed: number };
+    const role = p.beaconIds.includes(myId()) ? "beacon" : "player";
+    location.href = `../${p.game}/?room=${code}&role=${role}&seed=${p.seed}`;
   });
 
   if (isHost) {
@@ -106,6 +107,7 @@ function connect(): void {
 }
 
 function renderRoster(players: PlayerMeta[]): void {
+  roster = players;
   players.sort((a, b) => b.score - a.score || (b.host ? 1 : 0) - (a.host ? 1 : 0));
   $("plab").textContent = `Players (${players.length})`;
   const roster = $("roster");
@@ -131,7 +133,23 @@ function renderRoster(players: PlayerMeta[]): void {
 }
 
 $<HTMLButtonElement>("readyBtn").onclick = () => {
-  channel?.send({ type: "broadcast", event: "launch", payload: { game: "sentence", beaconId: myId() } });
+  // Any phone can be the beacon — pick at random each round so it rotates.
+  // 2–5 players share one beacon; 6+ get two beaming the same phrase (the
+  // shared seed keeps them identical) so a big group can crowd two screens.
+  const players = roster.length ? roster : [{ id: myId() } as PlayerMeta];
+  const beaconCount = players.length >= 6 ? 2 : 1;
+  const shuffled = [...players];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+  }
+  const beaconIds = shuffled.slice(0, beaconCount).map((p) => p.id);
+  const seed = Math.floor(Math.random() * 1_000_000);
+  channel?.send({
+    type: "broadcast",
+    event: "launch",
+    payload: { game: "sentence", beaconIds, seed },
+  });
   $("lobbyStatus").textContent = "🎮 Launching Phrase…";
 };
 

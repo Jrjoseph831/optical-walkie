@@ -136,6 +136,7 @@ function renderFrame(frame: Uint8Array): void {
 }
 
 async function startBeacon(): Promise<void> {
+  bcnGen++;
   const idx = puzzleSel.value === "random" ? Math.floor(Math.random() * IMAGES.length) : Number(puzzleSel.value);
   const pick = IMAGES[idx]!;
   const hash = await sha256hex(pick.answer);
@@ -165,6 +166,7 @@ async function startBeacon(): Promise<void> {
   void keepAwake();
 }
 function stopBeacon(): void {
+  bcnGen++;
   if (txTimer !== null) clearInterval(txTimer);
   txTimer = null;
   document.body.classList.remove("casting");
@@ -398,4 +400,35 @@ async function keepAwake(): Promise<void> {
   try {
     await (navigator as unknown as { wakeLock?: { request(t: string): Promise<unknown> } }).wakeLock?.request("screen");
   } catch { /* ignore */ }
+}
+
+// ---- walk-up auto-role: big screens beam, phones play ----
+let bcnGen = 0; // bumped by manual start/stop to cancel a pending countdown
+
+function drawCountdown(n: number): void {
+  bbCtx.fillStyle = "#ffffff";
+  bbCtx.fillRect(0, 0, bb.width, bb.height);
+  bbCtx.fillStyle = "#0b0d13";
+  bbCtx.font = `900 ${Math.round(bb.height * 0.5)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.textAlign = "center";
+  bbCtx.textBaseline = "middle";
+  bbCtx.fillText(String(n), bb.width / 2, bb.height / 2 + bb.height * 0.03);
+}
+
+async function autoBeacon(): Promise<void> {
+  const gen = ++bcnGen;
+  setRole("beacon");
+  document.body.classList.add("casting");
+  for (let n = 3; n > 0; n--) {
+    drawCountdown(n);
+    await new Promise((r) => setTimeout(r, 1000));
+    if (gen !== bcnGen) return;
+  }
+  void startBeacon();
+}
+
+if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  void autoBeacon();
+} else {
+  setRole("player");
 }

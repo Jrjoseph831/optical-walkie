@@ -183,8 +183,14 @@ function renderFrame(frame: Uint8Array): void {
 }
 const MARGIN_QR = 4;
 
-async function startBeacon(): Promise<void> {
-  const idx = puzzleSel.value === "random" ? Math.floor(Math.random() * PHRASES.length) : Number(puzzleSel.value);
+async function startBeacon(forceIdx?: number): Promise<void> {
+  bcnGen++;
+  const idx =
+    forceIdx !== undefined
+      ? forceIdx % PHRASES.length
+      : puzzleSel.value === "random"
+        ? Math.floor(Math.random() * PHRASES.length)
+        : Number(puzzleSel.value);
   const phrase = PHRASES[idx]!;
   const words = phrase.split(/\s+/);
   const hash = await sha256hex(phrase);
@@ -222,6 +228,7 @@ async function startBeacon(): Promise<void> {
       $("bcnStat").textContent = "Broadcast complete.";
       if (txTimer !== null) clearInterval(txTimer);
       txTimer = null;
+      onBroadcastDone();
       return;
     }
     renderFrame(playlist[playIdx]!);
@@ -238,6 +245,7 @@ async function startBeacon(): Promise<void> {
   void keepAwake();
 }
 function stopBeacon(): void {
+  bcnGen++;
   if (txTimer !== null) clearInterval(txTimer);
   txTimer = null;
   document.body.classList.remove("casting");
@@ -246,7 +254,55 @@ function stopBeacon(): void {
   b.classList.remove("stop");
   b.dataset.on = "";
 }
-$<HTMLButtonElement>("bcnBtn").onclick = () => ($<HTMLButtonElement>("bcnBtn").dataset.on ? stopBeacon() : void startBeacon());
+const defaultBcnClick = () =>
+  $<HTMLButtonElement>("bcnBtn").dataset.on ? stopBeacon() : void startBeacon();
+$<HTMLButtonElement>("bcnBtn").onclick = defaultBcnClick;
+
+// After the one-pass broadcast finishes: let a solo host spin up the next
+// phrase in one tap; a party beacon heads back to the lobby for the standings.
+function onBroadcastDone(): void {
+  const b = $<HTMLButtonElement>("bcnBtn");
+  b.classList.remove("stop");
+  b.dataset.on = "";
+  if (partyRoom) {
+    b.textContent = "‹ Back to lobby";
+    b.onclick = () => {
+      location.href = `../party/?room=${partyRoom}`;
+    };
+  } else {
+    b.textContent = "▶  Beam another phrase";
+    b.onclick = () => {
+      b.onclick = defaultBcnClick;
+      void autoBeacon(); // countdown again so players can tap "Play again" and re-aim
+    };
+  }
+}
+
+// Big 3·2·1 on the beacon canvas so freshly-arrived players have time to aim.
+function drawCountdown(n: number): void {
+  bbCtx.fillStyle = "#ffffff";
+  bbCtx.fillRect(0, 0, bb.width, bb.height);
+  bbCtx.fillStyle = "#0b0d13";
+  bbCtx.font = `900 ${Math.round(bb.height * 0.5)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.textAlign = "center";
+  bbCtx.textBaseline = "middle";
+  bbCtx.fillText(String(n), bb.width / 2, bb.height / 2 + bb.height * 0.03);
+}
+
+let bcnGen = 0; // bumped by any manual start/stop to cancel a pending countdown
+
+async function autoBeacon(seed?: number): Promise<void> {
+  const gen = ++bcnGen;
+  setRole("beacon");
+  document.body.classList.add("casting");
+  for (let n = 3; n > 0; n--) {
+    drawCountdown(n);
+    await new Promise((r) => setTimeout(r, 1000));
+    if (gen !== bcnGen) return;
+  }
+  bcnGen++;
+  void startBeacon(seed);
+}
 
 // ---------- PLAYER ----------
 const video = $<HTMLVideoElement>("video");
@@ -661,9 +717,20 @@ if (partyRoom) {
   nb.textContent = "‹ Back to lobby";
   nb.onclick = backToLobby;
   if (partyRole === "beacon") {
-    setRole("beacon");
-    void startBeacon(); // beacon needs no camera gesture — auto-broadcast
+    // Seed comes from the lobby so multiple beacons beam the SAME phrase.
+    const seed = Number(partyParams.get("seed"));
+    void autoBeacon(Number.isFinite(seed) ? seed : undefined);
   } else if (partyRole === "player") {
+    setRole("player");
+  }
+} else {
+  // Walk-up solo: a big hover/fine-pointer screen is the stage, a phone is the
+  // player. Auto-pick so the site "just starts" — Stop backs out of the
+  // auto-beacon to the role picker for the odd desktop-with-a-camera setup.
+  const desktopish = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  if (desktopish) {
+    void autoBeacon();
+  } else {
     setRole("player");
   }
 }

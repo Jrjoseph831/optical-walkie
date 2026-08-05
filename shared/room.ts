@@ -31,7 +31,11 @@ export function joinRoom(
 ): { channel: RealtimeChannel; update: (patch: Partial<PlayerMeta>) => void; id: string } {
   const id = myId();
   let current: PlayerMeta = { id, ...meta };
-  const channel = supabase.channel(`room:${room}`, { config: { presence: { key: id } } });
+  // self: true — the sender must receive its own broadcasts (the host fires
+  // `launch` and has to navigate into the game like everyone else).
+  const channel = supabase.channel(`room:${room}`, {
+    config: { presence: { key: id }, broadcast: { self: true } },
+  });
 
   channel.on("presence", { event: "sync" }, () => {
     const state = channel.presenceState() as unknown as Record<string, PlayerMeta[]>;
