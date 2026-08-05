@@ -278,8 +278,14 @@ function enterPlayerMode(): void {
   setRole("player");
   document.body.classList.add("prescan");
   const b = $<HTMLButtonElement>("camBtn");
-  b.textContent = "▶  Aim at the beacon";
+  b.textContent = partyRoom ? "✓  I'm ready" : "▶  Aim at the beacon";
   b.classList.remove("hide");
+  if (partyRoom) {
+    const t = document.querySelector(".th-title");
+    if (t) t.textContent = "Ready up";
+    const s = document.querySelector(".th-sub");
+    if (s) s.textContent = "Tap ready and aim at the beacon. The round starts once everyone's in.";
+  }
 }
 
 async function startCam(): Promise<void> {
@@ -302,7 +308,12 @@ async function startCam(): Promise<void> {
     $<HTMLButtonElement>("camBtn").classList.add("stop");
     $<HTMLButtonElement>("camBtn").dataset.on = "1";
     $("answerWrap").classList.remove("hide");
-    $("plStat").textContent = "Aim at the beacon — hold steady to fill it in.";
+    if (partyRoom) {
+      partyReportReady();
+      $("plStat").textContent = "✓ Ready — waiting for the countdown…";
+    } else {
+      $("plStat").textContent = "Aim at the beacon — hold steady to fill it in.";
+    }
     requestAnimationFrame(scan);
   } catch (e) {
     $("plStat").textContent = "Camera error: " + (e as Error).message;
@@ -514,7 +525,54 @@ async function autoBeacon(seed?: number): Promise<void> {
 // ---- party coordination (lazy realtime) ----
 let partyCh: { send: (a: unknown) => unknown } | null = null;
 let partyReportAnswer: () => void = () => {};
+let partyReportReady: () => void = () => {};
 let roundEnded = false;
+let beaconBegun = false;
+let pendingSeed: number | undefined;
+
+function drawBeaconWait(readyN: number, total: number): void {
+  bbCtx.fillStyle = "#ffffff";
+  bbCtx.fillRect(0, 0, bb.width, bb.height);
+  bbCtx.fillStyle = "#0b0d13";
+  bbCtx.textAlign = "center";
+  bbCtx.textBaseline = "middle";
+  bbCtx.font = `800 ${Math.round(bb.height * 0.11)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText("READY UP", bb.width / 2, bb.height * 0.3);
+  bbCtx.font = `900 ${Math.round(bb.height * 0.3)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText(`${readyN}/${total || "·"}`, bb.width / 2, bb.height * 0.56);
+  bbCtx.font = `700 ${Math.round(bb.height * 0.06)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText("players ready", bb.width / 2, bb.height * 0.78);
+}
+function enterBeaconWaiting(seed?: number): void {
+  setRole("beacon");
+  document.body.classList.add("casting");
+  pendingSeed = seed;
+  beaconBegun = false;
+  drawBeaconWait(0, 0);
+  const b = $<HTMLButtonElement>("bcnBtn");
+  b.textContent = "▶  Start now";
+  b.classList.remove("hide", "stop");
+  b.dataset.on = "";
+  b.onclick = () => beginRound();
+}
+function beginRound(): void {
+  if (beaconBegun) return;
+  beaconBegun = true;
+  void partyCh?.send({ type: "broadcast", event: "go", payload: {} });
+  void autoBeacon(pendingSeed);
+}
+function runPlayerCountdown(): void {
+  let n = 3;
+  $("plStat").textContent = `Starting in ${n}…`;
+  const iv = window.setInterval(() => {
+    n--;
+    if (n > 0) $("plStat").textContent = `Starting in ${n}…`;
+    else {
+      $("plStat").textContent = "Go! 🟢 Fill it in!";
+      clearInterval(iv);
+    }
+  }, 1000);
+}
 
 function endRevealRound(): void {
   if (roundEnded) return;
@@ -539,25 +597,41 @@ async function setupParty(): Promise<void> {
     partyCh = ch;
     const answeredIds = new Set<string>();
     let playerCount = 0;
+    let readyFlag = false;
+    const trackMe = () => ch.track({ role: partyRole, ready: readyFlag });
     const check = (): void => {
       if (isBeacon && partySession && playerCount > 0 && answeredIds.size >= playerCount) endRevealRound();
     };
     ch.on("presence", { event: "sync" }, () => {
-      const st = ch.presenceState() as unknown as Record<string, { role?: string }[]>;
-      playerCount = Object.values(st).flat().filter((m) => m.role === "player").length;
+      const members = Object.values(
+        ch.presenceState() as unknown as Record<string, { role?: string; ready?: boolean }[]>,
+      ).flat();
+      playerCount = members.filter((m) => m.role === "player").length;
+      const readyCount = members.filter((m) => m.role === "player" && m.ready).length;
       check();
+      if (isBeacon && !beaconBegun) {
+        drawBeaconWait(readyCount, playerCount);
+        if (playerCount > 0 && readyCount >= playerCount) beginRound();
+      }
     });
     ch.on("broadcast", { event: "answered" }, ({ payload }) => {
       answeredIds.add((payload as { id: string }).id);
       check();
     });
+    ch.on("broadcast", { event: "go" }, () => {
+      if (!isBeacon) runPlayerCountdown();
+    });
     ch.on("broadcast", { event: "roundend" }, () => {
       location.href = `../party/?room=${partyRoom}&back=1`;
     });
     ch.subscribe((s) => {
-      if (s === "SUBSCRIBED") void ch.track({ role: partyRole });
+      if (s === "SUBSCRIBED") void trackMe();
     });
     partyReportAnswer = () => void ch.send({ type: "broadcast", event: "answered", payload: { id } });
+    partyReportReady = () => {
+      readyFlag = true;
+      void trackMe();
+    };
   } catch { /* realtime unavailable */ }
 }
 
@@ -574,7 +648,7 @@ if (partyRoom) {
   void setupParty();
   if (partyRole === "beacon") {
     const seed = Number(partyParams.get("seed"));
-    void autoBeacon(Number.isFinite(seed) ? seed : undefined);
+    enterBeaconWaiting(Number.isFinite(seed) ? seed : undefined);
   } else {
     enterPlayerMode();
   }

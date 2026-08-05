@@ -367,6 +367,55 @@ let bcnGen = 0; // bumped by any manual start/stop to cancel a pending countdown
 // early and the host is offered the next round.
 let partyCh: { send: (a: unknown) => unknown } | null = null;
 let partyReportAnswer: () => void = () => {};
+let partyReportReady: () => void = () => {};
+let beaconBegun = false;
+let pendingSeed: number | undefined;
+
+// Beacon holds on a "N players ready" screen until everyone has armed their
+// camera (or the host taps Start now), then counts down and beams.
+function drawBeaconWait(readyN: number, total: number): void {
+  bbCtx.fillStyle = "#ffffff";
+  bbCtx.fillRect(0, 0, bb.width, bb.height);
+  bbCtx.fillStyle = "#0b0d13";
+  bbCtx.textAlign = "center";
+  bbCtx.textBaseline = "middle";
+  bbCtx.font = `800 ${Math.round(bb.height * 0.11)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText("READY UP", bb.width / 2, bb.height * 0.3);
+  bbCtx.font = `900 ${Math.round(bb.height * 0.3)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText(`${readyN}/${total || "·"}`, bb.width / 2, bb.height * 0.56);
+  bbCtx.font = `700 ${Math.round(bb.height * 0.06)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText("players ready", bb.width / 2, bb.height * 0.78);
+}
+function enterBeaconWaiting(seed?: number): void {
+  setRole("beacon");
+  document.body.classList.add("casting");
+  pendingSeed = seed;
+  beaconBegun = false;
+  drawBeaconWait(0, 0);
+  const b = $<HTMLButtonElement>("bcnBtn");
+  b.textContent = "▶  Start now";
+  b.classList.remove("hide", "stop");
+  b.dataset.on = "";
+  b.onclick = () => beginRound();
+}
+function beginRound(): void {
+  if (beaconBegun) return;
+  beaconBegun = true;
+  void partyCh?.send({ type: "broadcast", event: "go", payload: {} });
+  void autoBeacon(pendingSeed);
+}
+function runPlayerCountdown(): void {
+  let n = 3;
+  $("plStat").textContent = `Starting in ${n}…`;
+  const iv = window.setInterval(() => {
+    n--;
+    if (n > 0) $("plStat").textContent = `Starting in ${n}…`;
+    else {
+      $("plStat").textContent = "Go! 🟢 Read the phrase!";
+      clearInterval(iv);
+    }
+  }, 1000);
+}
 
 function startNextRound(): void {
   const seed = Math.floor(Math.random() * 1e9);
@@ -391,6 +440,8 @@ async function setupParty(): Promise<void> {
     partyCh = ch;
     const answeredIds = new Set<string>();
     let playerCount = 0;
+    let readyFlag = false; // my own ready, carried in presence (race-free)
+    const trackMe = () => ch.track({ role: partyRole, ready: readyFlag });
     const check = (): void => {
       if (isBeacon && playerCount > 0 && answeredIds.size >= playerCount && txTimer !== null) {
         $("bcnStat").textContent = "Everyone answered 🎉";
@@ -398,13 +449,23 @@ async function setupParty(): Promise<void> {
       }
     };
     ch.on("presence", { event: "sync" }, () => {
-      const st = ch.presenceState() as unknown as Record<string, { role?: string }[]>;
-      playerCount = Object.values(st).flat().filter((m) => m.role === "player").length;
+      const members = Object.values(
+        ch.presenceState() as unknown as Record<string, { role?: string; ready?: boolean }[]>,
+      ).flat();
+      playerCount = members.filter((m) => m.role === "player").length;
+      const readyCount = members.filter((m) => m.role === "player" && m.ready).length;
       check();
+      if (isBeacon && !beaconBegun) {
+        drawBeaconWait(readyCount, playerCount);
+        if (playerCount > 0 && readyCount >= playerCount) beginRound();
+      }
     });
     ch.on("broadcast", { event: "answered" }, ({ payload }) => {
       answeredIds.add((payload as { id: string }).id);
       check();
+    });
+    ch.on("broadcast", { event: "go" }, () => {
+      if (!isBeacon) runPlayerCountdown();
     });
     ch.on("broadcast", { event: "next" }, ({ payload }) => {
       answeredIds.clear();
@@ -421,9 +482,13 @@ async function setupParty(): Promise<void> {
       location.href = `../party/?room=${partyRoom}&back=1`;
     });
     ch.subscribe((s) => {
-      if (s === "SUBSCRIBED") void ch.track({ role: partyRole });
+      if (s === "SUBSCRIBED") void trackMe();
     });
     partyReportAnswer = () => void ch.send({ type: "broadcast", event: "answered", payload: { id } });
+    partyReportReady = () => {
+      readyFlag = true;
+      void trackMe();
+    };
   } catch {
     /* realtime unavailable — the round still plays, just no auto-advance */
   }
@@ -571,8 +636,14 @@ function enterPlayerMode(): void {
   setRole("player");
   document.body.classList.add("prescan");
   const b = $<HTMLButtonElement>("camBtn");
-  b.textContent = "▶  Aim at the beacon";
+  b.textContent = partyRoom ? "✓  I'm ready" : "▶  Aim at the beacon";
   b.classList.remove("hide");
+  if (partyRoom) {
+    const t = document.querySelector(".th-title");
+    if (t) t.textContent = "Ready up";
+    const s = document.querySelector(".th-sub");
+    if (s) s.textContent = "Tap ready and aim at the beacon. The round starts once everyone's in.";
+  }
 }
 
 async function startCam(): Promise<void> {
@@ -592,7 +663,12 @@ async function startCam(): Promise<void> {
     $<HTMLButtonElement>("camBtn").classList.add("stop");
     $<HTMLButtonElement>("camBtn").dataset.on = "1";
     $("answerWrap").classList.remove("hide");
-    $("plStat").textContent = "Aim at the beacon — read the phrase as it fills in!";
+    if (partyRoom) {
+      partyReportReady();
+      $("plStat").textContent = "✓ Ready — waiting for the countdown…";
+    } else {
+      $("plStat").textContent = "Aim at the beacon — read the phrase as it fills in!";
+    }
     if (wordCount === 0) $("words").textContent = "Locking onto the beacon…";
     startTimer();
     requestAnimationFrame(scan);
@@ -910,9 +986,10 @@ if (partyRoom) {
   nb.onclick = backToLobby;
   void setupParty();
   if (partyRole === "beacon") {
-    // Seed comes from the lobby so multiple beacons beam the SAME phrase.
+    // Seed comes from the lobby so multiple beacons beam the SAME phrase. The
+    // beacon holds on the ready screen until every player has armed their camera.
     const seed = Number(partyParams.get("seed"));
-    void autoBeacon(Number.isFinite(seed) ? seed : undefined);
+    enterBeaconWaiting(Number.isFinite(seed) ? seed : undefined);
   } else if (partyRole === "player") {
     enterPlayerMode();
   }

@@ -212,24 +212,17 @@ function beam(): void {
 
   document.body.classList.remove("drawing");
   document.body.classList.add("casting");
-  if (txTimer !== null) clearInterval(txTimer);
-  let idx = 0;
-  let tick = 0;
-  txTimer = window.setInterval(() => {
-    if (tick % META_EVERY === 0) {
-      renderFrame(metaFrame);
-      tick++;
-      return;
-    }
-    if (idx >= playlist.length) {
-      finishBroadcast();
-      return;
-    }
-    renderFrame(playlist[idx]!);
-    idx++;
-    tick++;
-  }, 1000 / TX_FPS);
-  void keepAwake();
+  pendingBeam = { playlist, metaFrame };
+  beaconBegun = false;
+  // Party: hold on the ready screen until every guesser has armed their camera
+  // (or the drawer taps Beam now), then count down and beam. Solo: beam now.
+  if (partyRoom) {
+    drawBeaconWait(readyCount, playerCount);
+    showBeamNow();
+    maybeBeginBeam();
+  } else {
+    void beginBeam();
+  }
 }
 $<HTMLButtonElement>("beamBtn").onclick = beam;
 
@@ -337,8 +330,14 @@ function enterPlayerMode(): void {
   setRole("player");
   document.body.classList.add("prescan");
   const b = $<HTMLButtonElement>("camBtn");
-  b.textContent = "▶  Aim at the drawer";
+  b.textContent = partyRoom ? "✓  I'm ready" : "▶  Aim at the drawer";
   b.classList.remove("hide");
+  if (partyRoom) {
+    const t = document.querySelector(".th-title");
+    if (t) t.textContent = "Ready up";
+    const s = document.querySelector(".th-sub");
+    if (s) s.textContent = "Tap ready and aim at the drawer. The round starts once everyone's in.";
+  }
 }
 
 async function startCam(): Promise<void> {
@@ -359,7 +358,12 @@ async function startCam(): Promise<void> {
     $<HTMLButtonElement>("camBtn").classList.add("stop");
     $<HTMLButtonElement>("camBtn").dataset.on = "1";
     $("answerWrap").classList.remove("hide");
-    $("plStat").textContent = "Aim at the drawer — the sketch fills in as you watch.";
+    if (partyRoom) {
+      partyReportReady();
+      $("plStat").textContent = "✓ Ready — waiting for the drawing…";
+    } else {
+      $("plStat").textContent = "Aim at the drawer — the sketch fills in as you watch.";
+    }
     requestAnimationFrame(scan);
   } catch (e) {
     $("plStat").textContent = "Camera error: " + (e as Error).message;
@@ -577,6 +581,92 @@ async function keepAwake(): Promise<void> {
 // ---------- party coordination (lazy realtime) ----------
 let partyCh: { send: (a: unknown) => unknown } | null = null;
 let partyReportAnswer: () => void = () => {};
+let partyReportReady: () => void = () => {};
+let beaconBegun = false;
+let pendingBeam: { playlist: Uint8Array[]; metaFrame: Uint8Array } | null = null;
+let playerCount = 0;
+let readyCount = 0;
+
+function drawCountdown(n: number): void {
+  bbCtx.fillStyle = "#ffffff";
+  bbCtx.fillRect(0, 0, bb.width, bb.height);
+  bbCtx.fillStyle = "#0b0d13";
+  bbCtx.textAlign = "center";
+  bbCtx.textBaseline = "middle";
+  bbCtx.font = `900 ${Math.round(bb.height * 0.5)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText(String(n), bb.width / 2, bb.height / 2 + bb.height * 0.03);
+}
+function drawBeaconWait(readyN: number, total: number): void {
+  bbCtx.fillStyle = "#ffffff";
+  bbCtx.fillRect(0, 0, bb.width, bb.height);
+  bbCtx.fillStyle = "#0b0d13";
+  bbCtx.textAlign = "center";
+  bbCtx.textBaseline = "middle";
+  bbCtx.font = `800 ${Math.round(bb.height * 0.11)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText("READY UP", bb.width / 2, bb.height * 0.3);
+  bbCtx.font = `900 ${Math.round(bb.height * 0.3)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText(`${readyN}/${total || "·"}`, bb.width / 2, bb.height * 0.56);
+  bbCtx.font = `700 ${Math.round(bb.height * 0.06)}px -apple-system, system-ui, sans-serif`;
+  bbCtx.fillText("guessers ready", bb.width / 2, bb.height * 0.78);
+}
+function showBeamNow(): void {
+  document.getElementById("beamNowBtn")?.remove();
+  const b = document.createElement("button");
+  b.className = "btn primary";
+  b.textContent = "▶ Beam now";
+  b.id = "beamNowBtn";
+  b.style.cssText = "position:fixed;left:22px;right:22px;bottom:22px;width:auto;";
+  b.onclick = () => void beginBeam();
+  $("beaconCard").appendChild(b);
+}
+function maybeBeginBeam(): void {
+  if (!pendingBeam || beaconBegun) return;
+  drawBeaconWait(readyCount, playerCount);
+  if (playerCount > 0 && readyCount >= playerCount) void beginBeam();
+}
+async function beginBeam(): Promise<void> {
+  if (!pendingBeam || beaconBegun) return;
+  beaconBegun = true;
+  document.getElementById("beamNowBtn")?.remove();
+  void partyCh?.send({ type: "broadcast", event: "go", payload: {} });
+  for (let n = 3; n > 0; n--) {
+    drawCountdown(n);
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  runBeam(pendingBeam.playlist, pendingBeam.metaFrame);
+}
+function runBeam(playlist: Uint8Array[], metaFrame: Uint8Array): void {
+  if (txTimer !== null) clearInterval(txTimer);
+  let idx = 0;
+  let tick = 0;
+  txTimer = window.setInterval(() => {
+    if (tick % META_EVERY === 0) {
+      renderFrame(metaFrame);
+      tick++;
+      return;
+    }
+    if (idx >= playlist.length) {
+      finishBroadcast();
+      return;
+    }
+    renderFrame(playlist[idx]!);
+    idx++;
+    tick++;
+  }, 1000 / TX_FPS);
+  void keepAwake();
+}
+function runPlayerCountdown(): void {
+  let n = 3;
+  $("plStat").textContent = `Starting in ${n}…`;
+  const iv = window.setInterval(() => {
+    n--;
+    if (n > 0) $("plStat").textContent = `Starting in ${n}…`;
+    else {
+      $("plStat").textContent = "Go! 🟢 What is it?";
+      clearInterval(iv);
+    }
+  }, 1000);
+}
 
 async function setupParty(): Promise<void> {
   if (!partyRoom) return;
@@ -587,7 +677,8 @@ async function setupParty(): Promise<void> {
     const ch = supabase.channel(`room:${partyRoom}`, { config: { presence: { key: id }, broadcast: { self: true } } });
     partyCh = ch;
     const answeredIds = new Set<string>();
-    let playerCount = 0;
+    let readyFlag = false;
+    const trackMe = () => ch.track({ role: partyRole, ready: readyFlag });
     const check = (): void => {
       if (isDrawer && playerCount > 0 && answeredIds.size >= playerCount && txTimer !== null) {
         $("bcnStat").removeAttribute("hidden");
@@ -596,13 +687,20 @@ async function setupParty(): Promise<void> {
       }
     };
     ch.on("presence", { event: "sync" }, () => {
-      const st = ch.presenceState() as unknown as Record<string, { role?: string }[]>;
-      playerCount = Object.values(st).flat().filter((m) => m.role === "player").length;
+      const members = Object.values(
+        ch.presenceState() as unknown as Record<string, { role?: string; ready?: boolean }[]>,
+      ).flat();
+      playerCount = members.filter((m) => m.role === "player").length;
+      readyCount = members.filter((m) => m.role === "player" && m.ready).length;
       check();
+      if (isDrawer) maybeBeginBeam();
     });
     ch.on("broadcast", { event: "answered" }, ({ payload }) => {
       answeredIds.add((payload as { id: string }).id);
       check();
+    });
+    ch.on("broadcast", { event: "go" }, () => {
+      if (!isDrawer) runPlayerCountdown();
     });
     ch.on("broadcast", { event: "next" }, ({ payload }) => {
       answeredIds.clear();
@@ -622,9 +720,13 @@ async function setupParty(): Promise<void> {
       location.href = `../party/?room=${partyRoom}&back=1`;
     });
     ch.subscribe((s) => {
-      if (s === "SUBSCRIBED") void ch.track({ role: partyRole });
+      if (s === "SUBSCRIBED") void trackMe();
     });
     partyReportAnswer = () => void ch.send({ type: "broadcast", event: "answered", payload: { id } });
+    partyReportReady = () => {
+      readyFlag = true;
+      void trackMe();
+    };
   } catch { /* realtime unavailable — round still plays */ }
 }
 
