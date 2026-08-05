@@ -27,8 +27,7 @@ const MARGIN = 4;
 const TX_FPS = 16;
 const SCAN_MS = 70;
 const META_EVERY = 12;
-const WORD_WINDOW_MS = 3500; // how long each word-picture broadcasts before moving on
-const ROUND_SECONDS = 45;
+const ROW_REPEAT = 7; // frames each row lingers so a camera can catch it (no loop)
 const GW = 30; // tiles wide per word
 const GH = 9; // tiles tall per word (one full row is sent per frame)
 
@@ -145,38 +144,48 @@ async function startBeacon(): Promise<void> {
   const words = phrase.split(/\s+/);
   const hash = await sha256hex(phrase);
   const metaFrame = frameForPayload(`M|${words.length}|${GW}|${GH}|${hash}`);
-  const wordFrames = words.map((w, wi) => {
+  const endFrame = frameForPayload(`E|done`);
+  const rowFrames: Uint8Array[] = [];
+  words.forEach((w, wi) => {
     const bits = wordToTiles(w);
-    const rows: Uint8Array[] = [];
     for (let r = 0; r < GH; r++) {
       let s = "";
       for (let x = 0; x < GW; x++) s += bits[r * GW + x] ? "1" : "0";
-      rows.push(frameForPayload(`R|${wi}|${r}|${s}`)); // whole row per frame
+      rowFrames.push(frameForPayload(`R|${wi}|${r}|${s}`));
     }
-    return rows;
   });
+  // Shuffle so the whole sentence fills in scattered — a little here, a little
+  // there — instead of word by word.
+  for (let i = rowFrames.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rowFrames[i], rowFrames[j]] = [rowFrames[j]!, rowFrames[i]!];
+  }
+  // One long, non-looping playlist. Each row lingers a few frames so a camera
+  // can catch it; when the playlist is exhausted the broadcast stops.
+  const playlist: Uint8Array[] = [];
+  for (const rf of rowFrames) for (let k = 0; k < ROW_REPEAT; k++) playlist.push(rf);
 
   if (txTimer !== null) clearInterval(txTimer);
-  if (windowTimer !== null) clearInterval(windowTimer);
-  let cur = 0;
-  let ptr = 0;
+  let idx = 0;
   let tick = 0;
   txTimer = window.setInterval(() => {
     if (tick % META_EVERY === 0) {
-      renderFrame(metaFrame);
-    } else {
-      const frames = wordFrames[cur]!;
-      renderFrame(frames[ptr]!);
-      ptr = (ptr + 1) % frames.length;
+      renderFrame(metaFrame); // keep grid + hash available throughout
+      tick++;
+      return;
     }
+    if (idx >= playlist.length) {
+      renderFrame(endFrame);
+      $("bcnStat").textContent = "Broadcast complete.";
+      if (txTimer !== null) clearInterval(txTimer);
+      txTimer = null;
+      return;
+    }
+    renderFrame(playlist[idx]!);
+    idx++;
     tick++;
+    $("bcnStat").textContent = `Broadcasting… ${Math.round((idx / playlist.length) * 100)}%`;
   }, 1000 / TX_FPS);
-  $("bcnStat").textContent = `Broadcasting word 1 / ${words.length} — looping`;
-  windowTimer = window.setInterval(() => {
-    cur = (cur + 1) % words.length; // loop through words, then repeat
-    ptr = 0;
-    $("bcnStat").textContent = `Broadcasting word ${cur + 1} / ${words.length} — looping`;
-  }, WORD_WINDOW_MS);
 
   const b = $<HTMLButtonElement>("bcnBtn");
   b.textContent = "Stop";
@@ -214,7 +223,7 @@ const wordCanvas: HTMLCanvasElement[] = [];
 const doneStreams = new Set<string>();
 const decoders = new Map<string, LTDecoder>();
 const pending: [number, number, string][] = []; // rows seen before meta
-let timeLeft = ROUND_SECONDS;
+let elapsed = 0;
 let countdown: number | null = null;
 
 function tickFx(): void {
@@ -288,14 +297,12 @@ function fmtTime(s: number): string {
   return `0:${String(Math.max(0, s)).padStart(2, "0")}`;
 }
 function startTimer(): void {
-  timeLeft = ROUND_SECONDS;
-  $("timer").textContent = fmtTime(timeLeft);
+  elapsed = 0;
+  $("timer").textContent = fmtTime(elapsed);
   if (countdown !== null) clearInterval(countdown);
   countdown = window.setInterval(() => {
-    timeLeft--;
-    $("timer").textContent = fmtTime(timeLeft);
-    $("timer").classList.toggle("low", timeLeft <= 5);
-    if (timeLeft <= 0) endRound();
+    elapsed++;
+    $("timer").textContent = fmtTime(elapsed);
   }, 1000);
 }
 function endRound(): void {
@@ -308,7 +315,6 @@ function endRound(): void {
   b.textContent = "Start scanning";
   b.classList.remove("stop");
   b.dataset.on = "";
-  if (!solved) $("plStat").textContent = "Time! Lock in your best guess.";
 }
 
 async function startCam(): Promise<void> {
@@ -390,6 +396,10 @@ function onFrame(bytes: Uint8Array): void {
 
 function handleFragment(str: string): void {
   const p = str.split("|");
+  if (p[0] === "E") {
+    if (!solved) $("plStat").textContent = "Broadcast complete — lock in your guess.";
+    return;
+  }
   if (p[0] === "M") {
     const wc = Number(p[1]);
     if (!answerHash && !Number.isNaN(wc)) {
@@ -429,8 +439,8 @@ $<HTMLButtonElement>("guessBtn").onclick = async () => {
     solved = true;
     const total = wordCount * GW * GH;
     const frac = total ? knownCount / total : 1;
-    const score = Math.max(50, Math.round((1 - frac) * 800 + timeLeft * 10));
-    $("result").innerHTML = `<span class="win">🎉 Correct! ${Math.round(frac * 100)}% revealed, ${timeLeft}s left → ${score} pts</span>`;
+    const score = Math.max(50, Math.round((1 - frac) * 1000));
+    $("result").innerHTML = `<span class="win">🎉 Correct! Guessed at ${Math.round(frac * 100)}% revealed → ${score} pts</span>`;
     $("answerWrap").classList.add("hide");
     endRound();
   } else {
@@ -450,8 +460,8 @@ function resetGame(): void {
   wordCanvas.length = 0;
   if (countdown !== null) clearInterval(countdown);
   countdown = null;
-  timeLeft = ROUND_SECONDS;
-  $("timer").textContent = fmtTime(timeLeft);
+  elapsed = 0;
+  $("timer").textContent = fmtTime(elapsed);
   $("timer").classList.remove("low");
   $("count").textContent = "0% revealed";
   $("result").innerHTML = "";
