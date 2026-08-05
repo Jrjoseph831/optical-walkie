@@ -234,13 +234,9 @@ $<HTMLButtonElement>("readyBtn").onclick = () => {
 
 function launchRound(sess: Session, roundNum: number): void {
   const game = sess.games[(roundNum - 1) % sess.games.length]!;
-  // Rotate the beacon/drawer through the players by round so it isn't always
-  // the same person. 2–5 players + Phrase can use two beacons.
-  const ordered = [...roster].sort((a, b) => (a.id < b.id ? -1 : 1));
-  const n = ordered.length || 1;
-  const beaconCount = game === "sentence" && n >= 6 ? 2 : 1;
-  const beaconIds: string[] = [];
-  for (let i = 0; i < beaconCount; i++) beaconIds.push(ordered[(roundNum - 1 + i) % n]?.id ?? myId());
+  // The host device is the shared beacon screen for every round (like a party's
+  // TV). Players stay players and just ready up each round — roles never swap.
+  const beaconIds = [myId()];
   const seed = Math.floor(Math.random() * 1_000_000);
   saveSession({ ...sess, round: roundNum });
   channel?.send({
@@ -250,7 +246,7 @@ function launchRound(sess: Session, roundNum: number): void {
   });
   $("lobbyStatus").textContent = `🎮 Launching ${GAME_LABEL[game]}…`;
   $("standStatus").textContent = `Launching ${GAME_LABEL[game]}…`;
-};
+}
 
 $<HTMLButtonElement>("nextBtn").onclick = () => {
   const sess = loadSession();
@@ -286,7 +282,10 @@ function showStandings(sess: Session): void {
   }
 }
 
-function paintStandings(sorted: PlayerMeta[]): void {
+function paintStandings(all: PlayerMeta[]): void {
+  // The host is the shared beacon screen, not a competitor — keep them off the
+  // board.
+  const sorted = all.filter((p) => !p.host);
   const podium = $("podium");
   podium.innerHTML = "";
   const medals = ["🥇", "🥈", "🥉"];
