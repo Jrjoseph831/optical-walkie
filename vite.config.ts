@@ -129,12 +129,12 @@ export default defineConfig(({ mode }) => {
         // We inject our own registration — see rootPwaHead().
         injectRegister: false,
         manifest: {
-          name: "Decimen Optical Transfer",
-          short_name: "Decimen",
+          name: "SIGNAL — optical party games",
+          short_name: "SIGNAL",
           description:
-            "Send a file or text between two devices with a screen and a camera. No network.",
-          theme_color: "#070a11",
-          background_color: "#070a11",
+            "Optical party games — no accounts, no network, light only.",
+          theme_color: "#0f1118",
+          background_color: "#0f1118",
           display: "standalone",
           start_url: "./",
           // Real icons, not the demo payload image this once pointed at. The
@@ -187,12 +187,9 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           index: resolve(__dirname, "index.html"),
-          send: resolve(__dirname, "send/index.html"),
-          receive: resolve(__dirname, "receive/index.html"),
           walkie: resolve(__dirname, "walkie/index.html"),
           fragments: resolve(__dirname, "fragments/index.html"),
           sentence: resolve(__dirname, "sentence/index.html"),
-          hub: resolve(__dirname, "hub/index.html"),
           party: resolve(__dirname, "party/index.html"),
         },
       },
