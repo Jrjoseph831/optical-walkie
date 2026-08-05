@@ -121,6 +121,11 @@ export default defineConfig(({ mode }) => {
       basicSsl(),
       VitePWA({
         registerType: "autoUpdate",
+        // Self-destroying: ship a worker that unregisters any previously-installed
+        // service worker and clears its caches, so pages always load fresh from
+        // the network. Offline caching was serving stale/bare pages on phones
+        // during rapid iteration — not worth it for this party app.
+        selfDestroying: true,
         // We inject our own registration — see rootPwaHead().
         injectRegister: false,
         manifest: {
