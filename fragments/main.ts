@@ -144,7 +144,15 @@ async function startBeacon(): Promise<void> {
   // Round nonce: lets players auto-reset when the beacon starts a fresh image
   // instead of piling new tiles onto the old board (see handleFragment).
   const round = Math.floor(Math.random() * 1e9);
-  const metaFrame = frameForPayload(`M|${GRID}|${GRID}|${hash}|${round}`);
+  // Answer choices: the image + 3 decoys as indices into IMAGES.
+  const choiceSet = new Set<number>([idx]);
+  while (choiceSet.size < Math.min(4, IMAGES.length)) choiceSet.add(Math.floor(Math.random() * IMAGES.length));
+  const choices = [...choiceSet];
+  for (let i = choices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [choices[i], choices[j]] = [choices[j]!, choices[i]!];
+  }
+  const metaFrame = frameForPayload(`M|${GRID}|${GRID}|${hash}|${round}|${choices.join(",")}`);
   const tileFrames = tiles.map((t, i) => frameForPayload(`T|${i}|${t[0]}|${t[1]}|${t[2]}`));
 
   if (txTimer !== null) clearInterval(txTimer);
@@ -198,6 +206,8 @@ let gridW = GRID;
 let gridH = GRID;
 let answerHash: string | null = null;
 let roundId: string | null = null;
+let answered = false;
+let answerIdx = -1; // index into IMAGES of the correct choice, once known
 const tilePix = new Map<number, number[]>();
 const doneStreams = new Set<string>();
 const decoders = new Map<string, LTDecoder>();
@@ -330,6 +340,7 @@ function handleFragment(str: string): void {
     }
     roundId = rid;
     answerHash = p[3]!;
+    void renderOptions((p[5] ?? "").split(",").map(Number).filter((n) => !Number.isNaN(n)));
     // Only re-init if the grid actually differs (tiles are already drawing).
     if (w !== gridW || h !== gridH) {
       gridW = w;
@@ -338,7 +349,7 @@ function handleFragment(str: string): void {
       for (const [idx, rgb] of tilePix) drawTile(idx, rgb);
     }
     if (!$("plStat").textContent?.startsWith("✨"))
-      $("plStat").textContent = "Locked on — keep filling, guess when ready.";
+      $("plStat").textContent = "Locked on — answer when you're sure.";
     return;
   }
   if (p[0] === "T") {
@@ -360,28 +371,50 @@ function updateProgress(): void {
   $("tiles").textContent = `${tilePix.size} pieces`;
 }
 
-$<HTMLButtonElement>("guessBtn").onclick = async () => {
-  if (solved || !answerHash) {
-    if (!answerHash) $("plStat").textContent = "Keep aiming — waiting to lock onto the beacon…";
-    return;
+// Jackbox-style answers: four choices, one lock-in. Earlier = more points; a
+// wrong lock ends your round and glows the real answer.
+const pretty = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+async function renderOptions(idxs: number[]): Promise<void> {
+  const wrap = $("opts");
+  wrap.innerHTML = "";
+  answered = false;
+  answerIdx = -1;
+  for (const ci of idxs) {
+    if ((await sha256hex(IMAGES[ci]?.answer ?? "")) === answerHash) answerIdx = ci;
   }
-  const guess = $<HTMLInputElement>("guess").value;
-  if (!guess.trim()) return;
-  const h = await sha256hex(guess);
-  if (h === answerHash) {
+  for (const ci of idxs) {
+    const b = document.createElement("button");
+    b.className = "opt";
+    b.textContent = pretty(IMAGES[ci]?.answer ?? "?");
+    b.onclick = () => lockIn(ci, b);
+    wrap.appendChild(b);
+  }
+}
+
+function lockIn(ci: number, btn: HTMLButtonElement): void {
+  if (answered || solved || !answerHash) return;
+  answered = true;
+  const buttons = [...$("opts").querySelectorAll("button")];
+  for (const b of buttons) b.disabled = true;
+  if (ci === answerIdx) {
+    btn.classList.add("correct");
     solved = true;
     const total = gridW * gridH;
     const revealed = tilePix.size / total;
-    const secs = (performance.now() - startTime) / 1000;
     const score = Math.max(50, Math.round((1 - revealed) * 1000));
     $("result").innerHTML = `<span class="win">🎉 Correct!<br />Solved at ${Math.round(revealed * 100)}% revealed<br />${score} pts</span>`;
     $("answerWrap").classList.add("hide");
     document.body.classList.add("result");
     stopCam();
   } else {
-    $("result").innerHTML = `<span class="lose">❌ Not it — keep going (or guess again)</span>`;
+    btn.classList.add("wrong");
+    for (const b of buttons) {
+      if (b.textContent === pretty(IMAGES[answerIdx]?.answer ?? "")) b.classList.add("correct");
+    }
+    $("result").innerHTML = `<span class="lose">Locked in — not it 😬</span>`;
   }
-};
+}
 
 function resetGame(): void {
   tilePix.clear();
@@ -395,17 +428,15 @@ function resetGame(): void {
   initReveal();
   updateProgress();
   $("result").innerHTML = "";
-  $<HTMLInputElement>("guess").value = "";
+  answered = false;
+  answerIdx = -1;
+  $("opts").innerHTML = `<div class="optsHint">Answers appear once you lock onto the beacon…</div>`;
   $("answerWrap").classList.toggle("hide", !scanning);
   $("plStat").textContent = scanning ? "New game — aim at the beacon." : "Tap Start, then aim at the beacon.";
   document.body.classList.remove("result");
   if (!scanning) document.body.classList.remove("playing");
 }
 $<HTMLButtonElement>("newBtn").onclick = resetGame;
-
-$<HTMLInputElement>("guess").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") $<HTMLButtonElement>("guessBtn").click();
-});
 
 async function keepAwake(): Promise<void> {
   try {

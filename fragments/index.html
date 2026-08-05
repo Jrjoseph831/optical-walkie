@@ -77,6 +77,17 @@
   .result{font-size:17px;font-weight:900;text-align:center;padding:6px;min-height:8px;}
   .win{color:var(--accent);} .lose{color:var(--red);}
 
+  /* answer options — pick one, lock it in */
+  .opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .optsHint{grid-column:1 / -1;text-align:center;font-size:12.5px;color:var(--faint);padding:12px 6px;}
+  .opt{padding:14px 10px;border-radius:15px;border:2px solid var(--border);background:var(--card2);color:var(--text);
+    font:inherit;font-size:14px;font-weight:800;line-height:1.25;text-align:center;cursor:pointer;
+    transition:transform .08s, border-color .12s, background .12s;}
+  .opt:active{transform:scale(.96);}
+  .opt:disabled{opacity:.55;}
+  .opt.correct{border-color:#37e0b0;background:rgba(55,224,176,.16);color:#37e0b0;opacity:1;}
+  .opt.wrong{border-color:var(--red);background:rgba(226,85,75,.2);color:var(--red);opacity:1;}
+
   video{position:fixed;width:2px;height:2px;opacity:.01;pointer-events:none;top:0;left:0;}
   canvas.work{display:none;}
   .foot{text-align:center;font-size:10px;color:var(--faint);letter-spacing:.06em;padding:2px 0 6px;}
@@ -87,9 +98,7 @@
     background:radial-gradient(1000px 540px at 50% -8%, rgba(255,92,138,.12), var(--bg) 62%);display:flex;flex-direction:column;}
   body.playing .panel-head,body.playing .status,body.playing #camBtn,body.playing #newBtn{display:none;}
   body.playing #reveal{flex:0 0 auto;width:min(88vw,62vh);height:min(88vw,62vh);margin:auto;}
-  body.playing #answerWrap{margin:0;padding-top:14px;border-top:1px solid var(--border);display:flex;gap:12px;align-items:center;}
-  body.playing #guess{background:transparent;border:0;border-radius:0;font-size:18px;padding:14px 2px;}
-  body.playing #guessBtn{width:auto;margin:0;padding:14px 26px;border-radius:999px;font-size:14px;letter-spacing:.06em;text-transform:uppercase;}
+  body.playing #answerWrap{margin:0;padding-top:14px;border-top:1px solid var(--border);display:block;}
 
   body.result .brand,body.result .hero,body.result .roles,body.result .foot,body.result #beaconCard,
   body.result .panel-head,body.result #reveal,body.result #answerWrap,body.result .status,body.result #camBtn{display:none;}
@@ -150,8 +159,7 @@
     <div class="status" id="plStat">Tap Start, then aim at the beacon.</div>
     <button id="camBtn" class="btn primary">Start</button>
     <div id="answerWrap" class="hide" style="margin-top:12px">
-      <input id="guess" placeholder="Guess the image…" autocapitalize="off" autocorrect="off" spellcheck="false" />
-      <button id="guessBtn" class="btn primary">Guess</button>
+      <div class="opts" id="opts"><div class="optsHint">Answers appear once you lock onto the beacon…</div></div>
     </div>
     <div id="result" class="result"></div>
     <button id="newBtn" class="btn ghost">New game</button>

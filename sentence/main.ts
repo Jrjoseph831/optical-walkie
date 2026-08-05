@@ -154,6 +154,17 @@ PHRASES.forEach((_, i) => {
 });
 puzzleSel.value = "random";
 
+// Tiny deterministic RNG — twin beacons seeded alike must agree on decoys.
+function mulberry32(a: number): () => number {
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function frameForPayload(s: string): Uint8Array {
   const payload = enc.encode(s);
   const sessionId = (Math.random() * 0x10000) | 0;
@@ -202,7 +213,18 @@ async function startBeacon(forceIdx?: number): Promise<void> {
   // in a seeded (party) round it must be the seed itself, so twin beacons
   // beaming the same phrase agree and don't reset each other's players.
   const round = forceIdx !== undefined ? forceIdx : Math.floor(Math.random() * 1e9);
-  const metaFrame = frameForPayload(`M|${words.length}|${GH}|${hash}|${widths.join(",")}|${round}`);
+  // Answer choices: the phrase + 3 decoys as indices into PHRASES, drawn from
+  // an RNG seeded with the nonce so twin beacons offer the identical set in
+  // the identical order.
+  const rng = mulberry32(round);
+  const choiceSet = new Set<number>([idx]);
+  while (choiceSet.size < Math.min(4, PHRASES.length)) choiceSet.add(Math.floor(rng() * PHRASES.length));
+  const choices = [...choiceSet];
+  for (let i = choices.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [choices[i], choices[j]] = [choices[j]!, choices[i]!];
+  }
+  const metaFrame = frameForPayload(`M|${words.length}|${GH}|${hash}|${widths.join(",")}|${round}|${choices.join(",")}`);
   const endFrame = frameForPayload(`E|done`);
 
   const rowFrames: Uint8Array[] = [];
@@ -326,6 +348,8 @@ let widths: number[] = [];
 let totalTiles = 0;
 let answerHash: string | null = null;
 let roundId: string | null = null;
+let answered = false;
+let answerIdx = -1; // index into PHRASES of the correct choice, once known
 let known: Uint8Array[] = [];
 let knownCount = 0;
 const wordCanvas: HTMLCanvasElement[] = [];
@@ -510,7 +534,7 @@ function onFrame(bytes: Uint8Array): void {
 function handleFragment(str: string): void {
   const p = str.split("|");
   if (p[0] === "E") {
-    if (!solved) $("plStat").textContent = "Broadcast complete — lock in your guess.";
+    if (!solved && !answered) $("plStat").textContent = "Broadcast complete — lock in your answer!";
     return;
   }
   if (p[0] === "M") {
@@ -533,6 +557,7 @@ function handleFragment(str: string): void {
     known = widths.map((wd) => new Uint8Array(wd * GH).fill(2));
     knownCount = 0;
     buildWordCanvases();
+    void renderOptions((p[6] ?? "").split(",").map(Number).filter((n) => !Number.isNaN(n)));
     for (const [w, r, s] of pending) setRow(w, r, s);
     pending.length = 0;
     return;
@@ -550,26 +575,45 @@ function handleFragment(str: string): void {
   }
 }
 
-$<HTMLButtonElement>("guessBtn").onclick = async () => {
-  if (solved) return;
-  if (!answerHash) {
-    $("plStat").textContent = "Keep aiming — still locking onto the beacon…";
-    return;
+// Jackbox-style answers: four choices, one lock-in. Guess earlier = more
+// points; a wrong lock ends your round and glows the real answer.
+async function renderOptions(idxs: number[]): Promise<void> {
+  const wrap = $("opts");
+  wrap.innerHTML = "";
+  answered = false;
+  answerIdx = -1;
+  for (const ci of idxs) {
+    if ((await sha256hex(PHRASES[ci] ?? "")) === answerHash) answerIdx = ci;
   }
-  const guess = $<HTMLInputElement>("guess").value;
-  if (!guess.trim()) return;
-  const h = await sha256hex(guess);
-  if (h === answerHash) {
+  for (const ci of idxs) {
+    const b = document.createElement("button");
+    b.className = "opt";
+    b.textContent = PHRASES[ci] ?? "?";
+    b.onclick = () => lockIn(ci, b);
+    wrap.appendChild(b);
+  }
+}
+
+function lockIn(ci: number, btn: HTMLButtonElement): void {
+  if (answered || solved || !answerHash) return;
+  answered = true;
+  const buttons = [...$("opts").querySelectorAll("button")];
+  for (const b of buttons) b.disabled = true;
+  if (ci === answerIdx) {
+    btn.classList.add("correct");
     solved = true;
     const frac = totalTiles ? knownCount / totalTiles : 1;
     const score = Math.max(50, Math.round((1 - frac) * 1000));
-    $("answerWrap").classList.add("hide");
     endRound();
     showWinStage(score, frac);
   } else {
-    $("result").innerHTML = `<span class="lose">❌ Not quite — try again</span>`;
+    btn.classList.add("wrong");
+    for (const b of buttons) {
+      if (b.textContent === (PHRASES[answerIdx] ?? "")) b.classList.add("correct");
+    }
+    $("result").innerHTML = `<span class="lose">Locked in — not it 😬</span>`;
   }
-};
+}
 
 // ---------- win stage: the loud moment ----------
 let stageScoreValue = 0;
@@ -698,7 +742,9 @@ function resetGame(): void {
   $("count").textContent = "0% revealed";
   $("result").innerHTML = "";
   $("stage").classList.add("hide");
-  $<HTMLInputElement>("guess").value = "";
+  answered = false;
+  answerIdx = -1;
+  $("opts").innerHTML = `<div class="optsHint">Answers appear once you lock onto the beacon…</div>`;
   $("words").textContent = scanning ? "Locking onto the beacon…" : "Start scanning and aim at the beacon.";
   $("answerWrap").classList.toggle("hide", !scanning);
   $("plStat").textContent = "";
@@ -707,10 +753,6 @@ function resetGame(): void {
   if (scanning) startTimer();
 }
 $<HTMLButtonElement>("newBtn").onclick = resetGame;
-
-$<HTMLInputElement>("guess").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") $<HTMLButtonElement>("guessBtn").click();
-});
 
 async function keepAwake(): Promise<void> {
   try {
