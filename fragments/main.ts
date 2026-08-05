@@ -201,24 +201,32 @@ function drawTile(idx: number, rgb: number[]): void {
   rCtx.fillRect(x, y, 1, 1);
 }
 function tick(): void {
-  try {
-    if (!audio) audio = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+  if (audio && audio.state === "running") {
+    const t = audio.currentTime;
     const o = audio.createOscillator();
     const g = audio.createGain();
     o.frequency.value = 880;
-    g.gain.value = 0.03;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.06, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
     o.connect(g);
     g.connect(audio.destination);
-    o.start();
-    o.stop(audio.currentTime + 0.03);
-  } catch { /* ignore */ }
-  navigator.vibrate?.(12);
+    o.start(t);
+    o.stop(t + 0.06);
+  }
+  navigator.vibrate?.(12); // no-op on iOS (Apple exposes no web Vibration API)
   const d = $("dot");
   d.classList.add("hit");
   setTimeout(() => d.classList.remove("hit"), 90);
 }
 
 async function startCam(): Promise<void> {
+  // Unlock audio inside the user gesture (tap) — otherwise it stays suspended
+  // on mobile and no ticks play.
+  try {
+    if (!audio) audio = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    void audio.resume();
+  } catch { /* ignore */ }
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
     video.srcObject = stream;
