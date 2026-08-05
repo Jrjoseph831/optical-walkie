@@ -1,10 +1,13 @@
-// Fragments — single-beacon optical clue hunt.
+// Fragments — reveal-the-mystery, single-beacon optical game.
 //
-// One device is the BEACON: it cycles through a puzzle's clues, broadcasting
-// each as an animated fountain-QR (reusing DECIMEN's codec). Other devices are
-// PLAYERS: their camera decodes each clue as it comes around, collects the full
-// set, and lets them guess the answer — verified ON-DEVICE against a hash baked
-// into the broadcast, so there is no server and no back-channel.
+// BEACON: takes an image, downsamples it to a GRID×GRID mosaic, and rapidly
+// broadcasts each tile (plus a meta fragment carrying grid size + answer hash)
+// as tiny fountain-QR streams (DECIMEN codec), cycling forever.
+//
+// PLAYER: camera is HIDDEN — the app grabs frames only to decode. Each decoded
+// tile fills in the mystery image, with a haptic tick. The picture sharpens as
+// you keep the beacon in frame; guess anytime (verified on-device via the hash).
+// Fewer tiles revealed at the moment you solve = more points.
 import QRCode from "qrcode";
 import { prepareZXingModule, readBarcodes } from "zxing-wasm/reader";
 import wasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
@@ -19,33 +22,31 @@ prepareZXingModule({
 });
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-const BLOCK_LEN = 400;
+const BLOCK_LEN = 64;
 const MARGIN = 4;
-const TX_FPS = 10;
-const FRAG_MS = 2000; // how long each clue is broadcast before the beacon moves on
-const SCAN_MS = 80;
-
-interface Puzzle {
-  id: string;
-  theme: string;
-  clues: string[];
-  answer: string;
-}
-const PUZZLES: Puzzle[] = [
-  { id: "p1", theme: "Animal", clues: ["I have a long trunk", "The largest land animal", "Famous for my memory", "Big flapping ears"], answer: "elephant" },
-  { id: "p2", theme: "Place", clues: ["City of light", "Home to a famous iron tower", "Croissants and cafés", "Capital of France"], answer: "paris" },
-  { id: "p3", theme: "Movie", clues: ["A great white shark", "Spielberg, 1975", "You're gonna need a bigger boat", "A New England beach town"], answer: "jaws" },
-];
+const TX_FPS = 12;
+const SCAN_MS = 70;
+const GRID = 16; // 256 tiles
+const META_EVERY = 14; // inject the meta fragment roughly every N frames
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+
+const IMAGES: { emoji: string; answer: string; label: string }[] = [
+  { emoji: "🐘", answer: "elephant", label: "Mystery A" },
+  { emoji: "🍕", answer: "pizza", label: "Mystery B" },
+  { emoji: "🐧", answer: "penguin", label: "Mystery C" },
+  { emoji: "🚀", answer: "rocket", label: "Mystery D" },
+  { emoji: "🦈", answer: "shark", label: "Mystery E" },
+  { emoji: "🍔", answer: "burger", label: "Mystery F" },
+];
 
 async function sha256hex(s: string): Promise<string> {
   const b = await crypto.subtle.digest("SHA-256", enc.encode(s.trim().toLowerCase()));
   return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-// ---------- role switching ----------
+// ---------- roles ----------
 function setRole(r: "beacon" | "player"): void {
   $("beaconCard").classList.toggle("hide", r !== "beacon");
   $("playerCard").classList.toggle("hide", r !== "player");
@@ -57,22 +58,59 @@ function setRole(r: "beacon" | "player"): void {
 $("roleBeacon").onclick = () => setRole("beacon");
 $("rolePlayer").onclick = () => setRole("player");
 
-// populate puzzle picker
 const puzzleSel = $<HTMLSelectElement>("puzzle");
-PUZZLES.forEach((p, i) => {
+IMAGES.forEach((p, i) => {
   const o = document.createElement("option");
   o.value = String(i);
-  o.textContent = `${p.theme} (${p.clues.length} clues)`;
+  o.textContent = `${p.label} ${p.emoji}`;
   puzzleSel.appendChild(o);
 });
 
 // ---------- BEACON ----------
 const bb = $<HTMLCanvasElement>("bb");
 const bbCtx = bb.getContext("2d")!;
-const mod = document.createElement("canvas");
-const modCtx = mod.getContext("2d")!;
+const modC = document.createElement("canvas");
+const modCtx = modC.getContext("2d")!;
 let txTimer: number | null = null;
-let fragTimer: number | null = null;
+
+// Render an emoji big, then downsample to GRID×GRID → array of [r,g,b].
+function imageToTiles(emoji: string): number[][] {
+  const c = document.createElement("canvas");
+  c.width = c.height = 220;
+  const cx = c.getContext("2d")!;
+  cx.fillStyle = "#0a0a0c";
+  cx.fillRect(0, 0, 220, 220);
+  cx.font = "170px serif";
+  cx.textAlign = "center";
+  cx.textBaseline = "middle";
+  cx.fillText(emoji, 110, 120);
+  const small = document.createElement("canvas");
+  small.width = small.height = GRID;
+  const sx = small.getContext("2d")!;
+  sx.imageSmoothingEnabled = true;
+  sx.drawImage(c, 0, 0, GRID, GRID);
+  const data = sx.getImageData(0, 0, GRID, GRID).data;
+  const tiles: number[][] = [];
+  for (let i = 0; i < GRID * GRID; i++) {
+    tiles.push([data[i * 4]!, data[i * 4 + 1]!, data[i * 4 + 2]!]);
+  }
+  return tiles;
+}
+
+function frameForPayload(s: string): Uint8Array {
+  const payload = enc.encode(s);
+  const sessionId = (Math.random() * 0x10000) | 0;
+  const e = new LTEncoder(payload, BLOCK_LEN, sessionId);
+  const base: FrameHeader = {
+    sessionId,
+    seq: 0,
+    k: e.k,
+    blockLen: BLOCK_LEN,
+    totalLen: payload.length,
+    payloadFnv: fnv1a(payload),
+  };
+  return packFrame({ ...base, seq: 0 }, e.encode(0));
+}
 
 function renderFrame(frame: Uint8Array): void {
   const qr = QRCode.create([{ data: frame, mode: "byte" } as unknown as QRCode.QRCodeSegment], {
@@ -80,60 +118,44 @@ function renderFrame(frame: Uint8Array): void {
   });
   const raster = rasterizeQr(qr.modules.size, qr.modules.data, MARGIN);
   const img = new ImageData(new Uint8ClampedArray(raster.pixels.buffer), raster.size, raster.size);
-  mod.width = raster.size;
-  mod.height = raster.size;
+  modC.width = raster.size;
+  modC.height = raster.size;
   modCtx.putImageData(img, 0, 0);
   bbCtx.imageSmoothingEnabled = false;
   bbCtx.clearRect(0, 0, bb.width, bb.height);
-  bbCtx.drawImage(mod, 0, 0, bb.width, bb.height);
+  bbCtx.drawImage(modC, 0, 0, bb.width, bb.height);
 }
 
 async function startBeacon(): Promise<void> {
-  const puzzle = PUZZLES[Number(puzzleSel.value)]!;
-  const hash = await sha256hex(puzzle.answer);
-  const total = puzzle.clues.length;
-  // Build one fountain encoder per clue fragment.
-  const encoders = puzzle.clues.map((clue, i) => {
-    const payload = enc.encode(`${puzzle.id}|${i}|${total}|${hash}|${clue}`);
-    const sessionId = ((Math.random() * 0x10000) | 0) ^ (i << 3);
-    const e = new LTEncoder(payload, BLOCK_LEN, sessionId);
-    const base: FrameHeader = {
-      sessionId,
-      seq: 0,
-      k: e.k,
-      blockLen: BLOCK_LEN,
-      totalLen: payload.length,
-      payloadFnv: fnv1a(payload),
-    };
-    return { e, base };
-  });
+  const pick = IMAGES[Number(puzzleSel.value)]!;
+  const hash = await sha256hex(pick.answer);
+  const tiles = imageToTiles(pick.emoji);
+  const metaFrame = frameForPayload(`M|${GRID}|${GRID}|${hash}`);
+  const tileFrames = tiles.map((t, i) => frameForPayload(`T|${i}|${t[0]}|${t[1]}|${t[2]}`));
 
   if (txTimer !== null) clearInterval(txTimer);
-  if (fragTimer !== null) clearInterval(fragTimer);
-  let frag = 0;
-  let seq = 0;
-  const draw = () => {
-    const { e, base } = encoders[frag]!;
-    renderFrame(packFrame({ ...base, seq }, e.encode(seq)));
-    seq++;
-  };
-  txTimer = window.setInterval(draw, 1000 / TX_FPS);
-  $("bcnStat").textContent = `Broadcasting “${puzzle.theme}” — clue 1 / ${total}`;
-  fragTimer = window.setInterval(() => {
-    frag = (frag + 1) % total;
-    seq = 0;
-    $("bcnStat").textContent = `Broadcasting “${puzzle.theme}” — clue ${frag + 1} / ${total}`;
-  }, FRAG_MS);
+  let ti = 0;
+  let tick = 0;
+  txTimer = window.setInterval(() => {
+    if (tick % META_EVERY === 0) {
+      renderFrame(metaFrame);
+    } else {
+      renderFrame(tileFrames[ti]!);
+      ti = (ti + 1) % tileFrames.length;
+    }
+    tick++;
+  }, 1000 / TX_FPS);
 
-  $<HTMLButtonElement>("bcnBtn").textContent = "Stop";
-  $<HTMLButtonElement>("bcnBtn").classList.add("stop");
-  $<HTMLButtonElement>("bcnBtn").dataset.on = "1";
+  $("bcnStat").textContent = `Broadcasting ${pick.label} — ${tiles.length} tiles looping`;
+  const b = $<HTMLButtonElement>("bcnBtn");
+  b.textContent = "Stop";
+  b.classList.add("stop");
+  b.dataset.on = "1";
   void keepAwake();
 }
 function stopBeacon(): void {
   if (txTimer !== null) clearInterval(txTimer);
-  if (fragTimer !== null) clearInterval(fragTimer);
-  txTimer = fragTimer = null;
+  txTimer = null;
   const b = $<HTMLButtonElement>("bcnBtn");
   b.textContent = "Start broadcasting";
   b.classList.remove("stop");
@@ -145,17 +167,53 @@ $<HTMLButtonElement>("bcnBtn").onclick = () => ($<HTMLButtonElement>("bcnBtn").d
 const video = $<HTMLVideoElement>("video");
 const work = $<HTMLCanvasElement>("work");
 const workCtx = work.getContext("2d", { willReadFrequently: true })!;
+const reveal = $<HTMLCanvasElement>("reveal");
+const rCtx = reveal.getContext("2d")!;
 let stream: MediaStream | null = null;
 let scanning = false;
 let inFlight = false;
 let lastScan = 0;
 let solved = false;
 let startTime = 0;
+let audio: AudioContext | null = null;
+
+let gridW = GRID;
+let gridH = GRID;
 let answerHash: string | null = null;
-let expectedTotal = 0;
-const collected = new Map<number, string>();
-const decoders = new Map<string, LTDecoder>();
+const tilePix = new Map<number, number[]>();
 const doneStreams = new Set<string>();
+const decoders = new Map<string, LTDecoder>();
+
+function initReveal(): void {
+  reveal.width = gridW;
+  reveal.height = gridH;
+  rCtx.imageSmoothingEnabled = false;
+  rCtx.fillStyle = "#111114";
+  rCtx.fillRect(0, 0, gridW, gridH);
+}
+function drawTile(idx: number, rgb: number[]): void {
+  const x = idx % gridW;
+  const y = Math.floor(idx / gridW);
+  rCtx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+  rCtx.fillRect(x, y, 1, 1);
+}
+function tick(): void {
+  try {
+    if (!audio) audio = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const o = audio.createOscillator();
+    const g = audio.createGain();
+    o.frequency.value = 880;
+    g.gain.value = 0.03;
+    o.connect(g);
+    g.connect(audio.destination);
+    o.start();
+    o.stop(audio.currentTime + 0.03);
+  } catch { /* ignore */ }
+  navigator.vibrate?.(12);
+  const d = $("dot");
+  d.classList.add("hit");
+  setTimeout(() => d.classList.remove("hit"), 90);
+}
 
 async function startCam(): Promise<void> {
   try {
@@ -163,10 +221,12 @@ async function startCam(): Promise<void> {
     video.srcObject = stream;
     await video.play();
     scanning = true;
-    $<HTMLButtonElement>("camBtn").textContent = "Stop camera";
+    initReveal();
+    $<HTMLButtonElement>("camBtn").textContent = "Stop scanning";
     $<HTMLButtonElement>("camBtn").classList.add("stop");
     $<HTMLButtonElement>("camBtn").dataset.on = "1";
-    $("plStat").textContent = "Scanning… collect every clue.";
+    $("answerWrap").classList.remove("hide");
+    $("plStat").textContent = "Aim at the beacon — hold steady to fill it in.";
     requestAnimationFrame(scan);
   } catch (e) {
     $("plStat").textContent = "Camera error: " + (e as Error).message;
@@ -177,7 +237,7 @@ function stopCam(): void {
   stream?.getTracks().forEach((t) => t.stop());
   stream = null;
   const b = $<HTMLButtonElement>("camBtn");
-  b.textContent = "Start camera";
+  b.textContent = "Start scanning";
   b.classList.remove("stop");
   b.dataset.on = "";
 }
@@ -227,63 +287,62 @@ function onFrame(bytes: Uint8Array): void {
 
 function handleFragment(str: string): void {
   const p = str.split("|");
-  if (p.length < 5) return;
-  const idx = Number(p[1]);
-  const total = Number(p[2]);
-  const hash = p[3]!;
-  const clue = p.slice(4).join("|");
-  if (Number.isNaN(idx) || Number.isNaN(total)) return;
-  if (collected.size === 0) startTime = performance.now();
-  answerHash = hash;
-  expectedTotal = total;
-  if (!collected.has(idx)) collected.set(idx, clue);
-  renderClues();
+  if (p[0] === "M") {
+    const w = Number(p[1]);
+    const h = Number(p[2]);
+    if (!answerHash && !Number.isNaN(w) && !Number.isNaN(h)) {
+      gridW = w;
+      gridH = h;
+      answerHash = p[3]!;
+      initReveal();
+      // paint any tiles caught before meta arrived
+      for (const [idx, rgb] of tilePix) drawTile(idx, rgb);
+    }
+    return;
+  }
+  if (p[0] === "T") {
+    const idx = Number(p[1]);
+    if (Number.isNaN(idx) || tilePix.has(idx)) return;
+    const rgb = [Number(p[2]), Number(p[3]), Number(p[4])];
+    if (tilePix.size === 0) startTime = performance.now();
+    tilePix.set(idx, rgb);
+    if (answerHash) drawTile(idx, rgb);
+    tick();
+    updateProgress();
+  }
 }
 
-function renderClues(): void {
-  $("prog").textContent = `${collected.size} / ${expectedTotal || "?"} clues`;
-  const wrap = $("clues");
-  wrap.innerHTML = "";
-  for (let i = 0; i < expectedTotal; i++) {
-    const div = document.createElement("div");
-    if (collected.has(i)) {
-      div.className = "clue";
-      div.innerHTML = `<span class="n">${i + 1}</span>`;
-      const t = document.createElement("span");
-      t.textContent = collected.get(i)!;
-      div.appendChild(t);
-    } else {
-      div.className = "slot";
-      div.textContent = `Clue ${i + 1} — not collected yet`;
-    }
-    wrap.appendChild(div);
-  }
-  if (expectedTotal > 0 && collected.size >= expectedTotal && !solved) {
-    $("answerWrap").classList.remove("hide");
-    $("plStat").textContent = "All clues collected! Take your guess.";
-  }
+function updateProgress(): void {
+  const total = gridW * gridH;
+  const pct = Math.round((tilePix.size / total) * 100);
+  $("pct").textContent = pct + "%";
+  $("tiles").textContent = `${tilePix.size} pieces`;
 }
 
 $<HTMLButtonElement>("guessBtn").onclick = async () => {
-  if (solved || !answerHash) return;
+  if (solved || !answerHash) {
+    if (!answerHash) $("plStat").textContent = "Keep aiming — waiting to lock onto the beacon…";
+    return;
+  }
   const guess = $<HTMLInputElement>("guess").value;
   if (!guess.trim()) return;
   const h = await sha256hex(guess);
   if (h === answerHash) {
     solved = true;
-    const secs = ((performance.now() - startTime) / 1000).toFixed(1);
-    $("result").innerHTML = `<span class="win">🎉 Correct! Solved in ${secs}s</span>`;
+    const total = gridW * gridH;
+    const revealed = tilePix.size / total;
+    const secs = (performance.now() - startTime) / 1000;
+    const score = Math.max(50, Math.round((1 - revealed) * 1000));
+    $("result").innerHTML = `<span class="win">🎉 Correct! Solved at ${Math.round(revealed * 100)}% revealed in ${secs.toFixed(1)}s → ${score} pts</span>`;
     $("answerWrap").classList.add("hide");
     stopCam();
   } else {
-    $("result").innerHTML = `<span class="lose">❌ Not it — try again</span>`;
+    $("result").innerHTML = `<span class="lose">❌ Not it — keep going (or guess again)</span>`;
   }
 };
 
 async function keepAwake(): Promise<void> {
   try {
     await (navigator as unknown as { wakeLock?: { request(t: string): Promise<unknown> } }).wakeLock?.request("screen");
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 }
