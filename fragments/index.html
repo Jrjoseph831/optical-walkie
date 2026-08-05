@@ -2,76 +2,164 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Fragments — Reveal the Mystery</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0f1118" />
+<title>Reveal — SIGNAL</title>
 <style>
-  :root{--bg:#0a0a0c;--card:#161618;--border:#2a2a2d;--text:#e8e8ea;--dim:#8a8a90;--green:#2fbf71;--gold:#EF9F27;--red:#E24B4A;}
+  :root{
+    --bg:#0f1118; --card:#171a24; --card2:#1d212e; --border:#272c3b;
+    --text:#f3f5fb; --dim:#9aa0b4; --faint:#666c80;
+    --accent:#ff5c8a; --accent2:#e6416f; --gold:#ffb84d; --red:#e2554b;
+  }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;min-height:100%;}
-  body{background:var(--bg);color:var(--text);font:14px/1.4 -apple-system,system-ui,sans-serif;padding:10px;display:flex;flex-direction:column;gap:10px;}
-  h1{font-size:16px;margin:0;}
-  .sub{font-size:11px;color:var(--dim);margin:0;}
-  .roles{display:flex;gap:8px;}
-  .roles button{flex:1;padding:14px;font-size:16px;font-weight:700;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);}
-  .roles button.active{background:var(--gold);color:#111;border-color:var(--gold);}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;}
-  label{display:block;font-size:11px;color:var(--dim);margin-bottom:4px;}
-  select,input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:15px;}
-  .btn{width:100%;padding:14px;font-size:16px;font-weight:800;border-radius:12px;border:0;background:var(--green);color:#052012;margin-top:10px;}
-  .btn.alt{background:var(--gold);color:#111;}
-  .btn.stop{background:var(--red);color:#fff;}
-  .hide{display:none;}
-  #bb{image-rendering:pixelated;width:min(82vw,420px);height:min(82vw,420px);background:#fff;border-radius:8px;display:block;margin:10px auto 0;}
-  #reveal{image-rendering:pixelated;width:min(86vw,460px);height:min(86vw,460px);background:#0a0a0c;border:1px solid var(--border);border-radius:12px;display:block;margin:0 auto;}
-  .meter{display:flex;align-items:center;gap:10px;justify-content:center;margin:8px 0;}
-  .dot{width:12px;height:12px;border-radius:50%;background:#333;transition:background .1s,box-shadow .1s;}
-  .dot.hit{background:var(--green);box-shadow:0 0 10px var(--green);}
-  .pct{font-size:22px;font-weight:800;}
-  .tiles{font-size:11px;color:var(--dim);}
-  .status{font-size:12px;color:var(--dim);min-height:16px;text-align:center;}
-  .result{font-size:20px;font-weight:800;text-align:center;padding:8px;}
-  .win{color:var(--green);} .lose{color:var(--red);}
-  video{position:fixed;width:2px;height:2px;opacity:0.01;pointer-events:none;top:0;left:0;}
+  body{
+    background:radial-gradient(900px 520px at 50% -8%, rgba(255,92,138,.18), transparent 60%), var(--bg);
+    color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    padding:18px 16px 28px;max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px;
+  }
+  .hide{display:none !important;}
+
+  .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;}
+  .brand .logo{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-weight:900;color:#1a0a12;
+    background:linear-gradient(135deg,#ff8fb0,var(--accent));box-shadow:0 6px 16px rgba(255,92,138,.35);}
+  .brand h1{font-size:16px;letter-spacing:.16em;margin:0;font-weight:800;}
+  .brand .back{margin-left:auto;font-size:12px;font-weight:700;color:var(--dim);}
+
+  .hero{display:flex;align-items:center;gap:12px;padding:4px 2px;}
+  .hero .emoji{font-size:34px;}
+  .hero h2{margin:0;font-size:22px;font-weight:900;}
+  .hero p{margin:2px 0 0;font-size:12.5px;color:var(--dim);}
+
+  .roles{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .rolecard{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;
+    padding:18px;border-radius:20px;border:2px solid var(--border);background:var(--card);color:var(--text);
+    transition:transform .1s, border-color .12s, box-shadow .12s;}
+  .rolecard:active{transform:scale(.97);}
+  .rolecard .ri{font-size:30px;}
+  .rolecard b{font-size:18px;font-weight:900;}
+  .rolecard small{font-size:11.5px;color:var(--dim);font-weight:600;}
+  .rolecard.active{border-color:var(--accent);box-shadow:0 0 0 4px rgba(255,92,138,.15),0 12px 28px rgba(0,0,0,.35);background:var(--card2);}
+
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:22px;padding:18px;box-shadow:0 12px 34px rgba(0,0,0,.32);}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .panel-head h3{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0;font-weight:800;}
+  .hud{display:flex;align-items:center;gap:8px;}
+  .pill{font-size:11px;font-weight:800;color:var(--dim);background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:6px 11px;white-space:nowrap;}
+
+  label{display:block;font-size:12px;color:var(--dim);margin:2px 0 7px;font-weight:600;}
+  select,input{width:100%;background:var(--bg);color:var(--text);border:2px solid var(--border);border-radius:14px;padding:13px;font-size:16px;font-weight:600;}
+  select:focus,input:focus{outline:none;border-color:var(--accent2);}
+
+  .btn{width:100%;padding:16px;font-size:17px;font-weight:900;border:0;border-radius:16px;margin-top:14px;letter-spacing:.03em;transition:transform .06s;}
+  .btn:active{transform:scale(.98);}
+  .btn.primary{background:linear-gradient(180deg,#ff7ba2,var(--accent2));color:#25060f;box-shadow:0 10px 24px rgba(255,92,138,.3);}
+  .btn.stop{background:linear-gradient(180deg,#ef6a60,var(--red));color:#fff;box-shadow:0 10px 24px rgba(226,85,75,.28);}
+  .btn.ghost{background:transparent;border:2px solid var(--border);color:var(--dim);box-shadow:none;}
+
+  .transmitter{margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .tx-frame{position:relative;padding:14px;border-radius:22px;background:#0b0d13;border:1px solid var(--border);}
+  .tx-frame::before{content:"";position:absolute;inset:-2px;border-radius:22px;padding:2px;
+    background:linear-gradient(135deg,var(--accent),transparent 45%,transparent 55%,var(--accent));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+    animation:glow 3s ease-in-out infinite;pointer-events:none;}
+  @keyframes glow{0%,100%{opacity:.45}50%{opacity:1}}
+  #bb{image-rendering:pixelated;width:min(72vw,340px);height:min(72vw,340px);background:#fff;border-radius:12px;display:block;}
+  .tx-caption{font-size:12px;color:var(--faint);display:flex;align-items:center;gap:7px;}
+  .tx-caption::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:blink 1.4s infinite;}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+  .signal{width:14px;height:14px;border-radius:50%;background:#2a2e3c;transition:.1s;}
+  .signal.hit{background:var(--gold);box-shadow:0 0 12px var(--gold);}
+  #reveal{image-rendering:pixelated;width:min(74vw,320px);height:min(74vw,320px);display:block;margin:2px auto 0;
+    background:#111114;border:1px solid var(--border);border-radius:16px;box-shadow:inset 0 2px 22px rgba(0,0,0,.55);}
+  .status{font-size:12.5px;color:var(--dim);min-height:16px;margin-top:10px;text-align:center;}
+  .result{font-size:17px;font-weight:900;text-align:center;padding:6px;min-height:8px;}
+  .win{color:var(--accent);} .lose{color:var(--red);}
+
+  video{position:fixed;width:2px;height:2px;opacity:.01;pointer-events:none;top:0;left:0;}
   canvas.work{display:none;}
+  .foot{text-align:center;font-size:10px;color:var(--faint);letter-spacing:.06em;padding:2px 0 6px;}
+
+  /* immersive */
+  body.playing .brand,body.playing .hero,body.playing .roles,body.playing .foot,body.playing #beaconCard{display:none;}
+  body.playing #playerCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:22px;box-shadow:none;
+    background:radial-gradient(1000px 540px at 50% -8%, rgba(255,92,138,.12), var(--bg) 62%);display:flex;flex-direction:column;}
+  body.playing .panel-head,body.playing .status,body.playing #camBtn,body.playing #newBtn{display:none;}
+  body.playing #reveal{flex:1;width:auto;height:auto;max-height:70vh;aspect-ratio:1/1;margin:auto;}
+  body.playing #answerWrap{margin:0;padding-top:14px;border-top:1px solid var(--border);display:flex;gap:12px;align-items:center;}
+  body.playing #guess{background:transparent;border:0;border-radius:0;font-size:18px;padding:14px 2px;}
+  body.playing #guessBtn{width:auto;margin:0;padding:14px 26px;border-radius:999px;font-size:14px;letter-spacing:.06em;text-transform:uppercase;}
+
+  body.result .brand,body.result .hero,body.result .roles,body.result .foot,body.result #beaconCard,
+  body.result .panel-head,body.result #reveal,body.result #answerWrap,body.result .status,body.result #camBtn{display:none;}
+  body.result #playerCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:32px;box-shadow:none;
+    background:radial-gradient(900px 540px at 50% 0%, rgba(255,92,138,.14), var(--bg) 62%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;}
+  body.result #result{font-size:26px;line-height:1.45;max-width:340px;}
+  body.result #newBtn{display:block;max-width:240px;margin:0;}
+
+  body.casting .brand,body.casting .hero,body.casting .roles,body.casting .foot,body.casting #playerCard{display:none;}
+  body.casting #beaconCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:24px;box-shadow:none;
+    background:radial-gradient(900px 540px at 50% -8%, rgba(255,92,138,.14), var(--bg) 62%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+  body.casting label,body.casting #puzzle,body.casting .panel-head h3{display:none;}
+  body.casting .panel-head{margin:0;justify-content:center;}
+  body.casting #bb{width:min(82vw,440px);height:min(82vw,440px);}
+  body.casting #bcnBtn{position:fixed;left:22px;right:22px;bottom:22px;width:auto;margin:0;}
 </style>
 </head>
 <body>
-  <div>
-    <h1>Fragments</h1>
-    <p class="sub">Point your phone at the beacon. A mystery image fills in as you aim. Guess the moment you know — less revealed = more points.</p>
+  <a class="brand" href="../hub/">
+    <span class="logo">◇</span>
+    <h1>SIGNAL</h1>
+    <span class="back">‹ home</span>
+  </a>
+
+  <div class="hero">
+    <span class="emoji">🖼️</span>
+    <div><h2>Reveal</h2><p>Guess the mystery image as it fills in.</p></div>
   </div>
 
   <div class="roles">
-    <button id="roleBeacon">📡 Beacon</button>
-    <button id="rolePlayer">🔍 Player</button>
+    <button id="roleBeacon" class="rolecard"><span class="ri">📡</span><b>Beacon</b><small>show the code</small></button>
+    <button id="rolePlayer" class="rolecard"><span class="ri">🔍</span><b>Player</b><small>guess the image</small></button>
   </div>
 
   <!-- BEACON -->
-  <div id="beaconCard" class="card hide">
+  <section id="beaconCard" class="panel hide">
+    <div class="panel-head"><h3>Beacon</h3><span class="pill" id="bcnStat">Ready</span></div>
     <label>Mystery image</label>
     <select id="puzzle"></select>
-    <button id="bcnBtn" class="btn alt">Start broadcasting</button>
-    <canvas id="bb" width="440" height="440"></canvas>
-    <div class="status" id="bcnStat" style="margin-top:8px"></div>
-  </div>
+    <button id="bcnBtn" class="btn primary">Start</button>
+    <div class="transmitter">
+      <div class="tx-frame"><canvas id="bb" width="440" height="440"></canvas></div>
+      <div class="tx-caption">Players point their phones here</div>
+    </div>
+  </section>
 
   <!-- PLAYER -->
-  <div id="playerCard" class="card hide">
-    <canvas id="reveal" width="256" height="256"></canvas>
-    <div class="meter">
-      <div class="dot" id="dot"></div>
-      <div class="pct" id="pct">0%</div>
-      <div class="tiles" id="tiles">0 pieces</div>
+  <section id="playerCard" class="panel hide">
+    <div class="panel-head">
+      <h3>Player</h3>
+      <div class="hud">
+        <span class="signal" id="dot"></span>
+        <span class="pill" id="pct">0%</span>
+        <span class="pill" id="tiles">0 pieces</span>
+      </div>
     </div>
-    <div class="status" id="plStat">Start scanning and aim at the beacon.</div>
-    <button id="camBtn" class="btn">Start scanning</button>
+    <canvas id="reveal" width="256" height="256"></canvas>
+    <div class="status" id="plStat">Tap Start, then aim at the beacon.</div>
+    <button id="camBtn" class="btn primary">Start</button>
     <div id="answerWrap" class="hide" style="margin-top:12px">
-      <input id="guess" placeholder="Guess the answer anytime…" autocapitalize="off" autocorrect="off" />
-      <button id="guessBtn" class="btn">Guess</button>
+      <input id="guess" placeholder="Guess the image…" autocapitalize="off" autocorrect="off" spellcheck="false" />
+      <button id="guessBtn" class="btn primary">Guess</button>
     </div>
     <div id="result" class="result"></div>
-    <button id="newBtn" class="btn alt">🔄 New game</button>
-  </div>
+    <button id="newBtn" class="btn ghost">New game</button>
+  </section>
+
+  <div class="foot">no accounts · no network · light only</div>
 
   <video id="video" playsinline muted></video>
   <canvas id="work" class="work"></canvas>
