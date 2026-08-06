@@ -24,7 +24,8 @@ const dec = new TextDecoder();
 const TX_FPS = 16;
 const SCAN_MS = 70;
 const META_EVERY = 10;
-const GRID = 44; // drawing rasterised to GRID x GRID monochrome
+const GRID = 36; // drawing rasterised to GRID x GRID monochrome (smaller = chunkier
+// QR modules = readable from farther; still plenty of detail for a sketch)
 const ROW_REPEAT = 5;
 const TX_PASSES = 2;
 const MARGIN_QR = 4;

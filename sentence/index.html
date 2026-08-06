@@ -153,7 +153,8 @@
     background:radial-gradient(900px 540px at 50% -8%, rgba(55,224,176,.14), var(--bg) 62%);
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
   body.casting label,body.casting #puzzle,body.casting .panel-head{display:none;}
-  body.casting #bb{width:min(82vw,440px);height:min(82vw,440px);}
+  body.casting #bb{width:min(94vw,80vh);height:min(94vw,80vh);}
+  body.casting .tx-frame{padding:8px;}
   body.casting #bcnBtn{position:fixed;left:22px;right:22px;bottom:22px;width:auto;margin:0;}
 </style>
 </head>
@@ -180,7 +181,7 @@
     <select id="puzzle" hidden></select>
     <button id="bcnBtn" class="btn primary">Start</button>
     <div class="transmitter">
-      <div class="tx-frame"><canvas id="bb" width="440" height="440"></canvas></div>
+      <div class="tx-frame"><canvas id="bb" width="720" height="720"></canvas></div>
       <div class="tx-caption">Players point their phones here</div>
     </div>
   </section>
