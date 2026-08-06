@@ -298,6 +298,9 @@ async function startBeacon(forceIdx?: number): Promise<void> {
   b.textContent = "Stop";
   b.classList.add("stop");
   b.dataset.on = "1";
+  // In a party the round ends on its own, so Stop does nothing — hide it so it's
+  // not sitting on top of the (now full-screen) code. Solo keeps a real Stop.
+  b.classList.toggle("hide", !!partyRoom);
   document.body.classList.add("casting");
   void keepAwake();
 }

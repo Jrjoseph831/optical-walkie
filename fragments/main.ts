@@ -199,6 +199,8 @@ async function startBeacon(forceIdx?: number): Promise<void> {
   b.textContent = "Stop";
   b.classList.add("stop");
   b.dataset.on = "1";
+  // Party rounds end on their own — hide the useless Stop so it's not over the code.
+  b.classList.toggle("hide", !!partyRoom);
   document.body.classList.add("casting");
   void keepAwake();
 }
