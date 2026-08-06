@@ -22,9 +22,10 @@ let isHost = false;
 let name = myName();
 let channel: RealtimeChannel | null = null;
 let roster: PlayerMeta[] = [];
+let phase: "lobby" | "progress" | "standings" = "lobby";
 
 // ---- session state (persisted so it survives the trip through a game page) ----
-interface Session { games: string[]; total: number; round: number; }
+interface Session { games: string[]; total: number; round: number; drawIdx: number; }
 const sessKey = () => `signal_sess_${code}`;
 function loadSession(): Session | null {
   try {
@@ -156,9 +157,24 @@ function connect(): void {
 
   channel.on("broadcast", { event: "round" }, ({ payload }) => {
     const p = payload as { game: string; beaconIds: string[]; seed: number; round: number; total: number };
-    saveSession({ games: loadSession()?.games ?? enabledArray(), total: p.total, round: p.round });
-    const role = p.beaconIds.includes(myId()) ? "beacon" : "player";
+    const prev = loadSession();
+    saveSession({ games: prev?.games ?? enabledArray(), total: p.total, round: p.round, drawIdx: prev?.drawIdx ?? 0 });
+    const iAmBeacon = p.beaconIds.includes(myId());
+    // The host is the shared screen. On a Draw round a player's phone is the
+    // beacon, so the host isn't — it stays here and spectates instead of trying
+    // to be a guesser (a desktop can't scan). Everyone else navigates in.
+    if (isHost && !iAmBeacon) {
+      showRoundInProgress(p.game, p.round, p.total);
+      return;
+    }
+    const role = iAmBeacon ? "beacon" : "player";
     location.href = `../${p.game}/?room=${code}&role=${role}&seed=${p.seed}&round=${p.round}&of=${p.total}`;
+  });
+
+  // A round finished while we were spectating (Draw) — show the standings.
+  channel.on("broadcast", { event: "roundend" }, () => {
+    const sess = loadSession();
+    if (sess) showStandings(sess);
   });
 
   // Host started a fresh game — everyone clears their score and returns to the
@@ -182,6 +198,7 @@ function enabledArray(): string[] {
 }
 
 function showLobbyControls(): void {
+  phase = "lobby";
   $("standings").classList.add("hide");
   $("lobby").classList.remove("hide");
   if (isHost) {
@@ -219,14 +236,15 @@ function renderRoster(players: PlayerMeta[]): void {
     row.append(av, nm, tag, sc);
     rosterEl.appendChild(row);
   }
-  // keep the podium fresh if we're on the standings screen
-  if (!$("standings").classList.contains("hide")) paintStandings(sorted);
+  // keep the podium fresh if we're on the standings screen (but not while a
+  // round is in progress, or we'd paint over the "drawing…" status)
+  if (phase === "standings") paintStandings(sorted);
 }
 
 // ---- start / advance the session ----
 $<HTMLButtonElement>("readyBtn").onclick = () => {
   const games = enabledArray();
-  const sess: Session = { games, total: chosenRounds, round: 0 };
+  const sess: Session = { games, total: chosenRounds, round: 0, drawIdx: 0 };
   saveSession(sess);
   channel?.send({ type: "broadcast", event: "session", payload: sess });
   launchRound(sess, 1);
@@ -234,11 +252,24 @@ $<HTMLButtonElement>("readyBtn").onclick = () => {
 
 function launchRound(sess: Session, roundNum: number): void {
   const game = sess.games[(roundNum - 1) % sess.games.length]!;
-  // The host device is the shared beacon screen for every round (like a party's
-  // TV). Players stay players and just ready up each round — roles never swap.
-  const beaconIds = [myId()];
+  let drawIdx = sess.drawIdx ?? 0;
+  let beaconIds: string[];
+  if (game === "draw") {
+    // Draw is private: the drawer sketches on their own phone. Rotate it through
+    // the (non-host) players so everyone gets a turn; the host screen spectates.
+    const players = [...roster].filter((p) => !p.host).sort((a, b) => (a.id < b.id ? -1 : 1));
+    if (players.length === 0) {
+      beaconIds = [myId()];
+    } else {
+      beaconIds = [players[drawIdx % players.length]!.id];
+      drawIdx += 1;
+    }
+  } else {
+    // Phrase / Reveal: the host device is the shared beacon screen.
+    beaconIds = [myId()];
+  }
   const seed = Math.floor(Math.random() * 1_000_000);
-  saveSession({ ...sess, round: roundNum });
+  saveSession({ ...sess, round: roundNum, drawIdx });
   channel?.send({
     type: "broadcast",
     event: "round",
@@ -246,6 +277,18 @@ function launchRound(sess: Session, roundNum: number): void {
   });
   $("lobbyStatus").textContent = `🎮 Launching ${GAME_LABEL[game]}…`;
   $("standStatus").textContent = `Launching ${GAME_LABEL[game]}…`;
+}
+
+function showRoundInProgress(game: string, round: number, total: number): void {
+  phase = "progress";
+  $("lobby").classList.add("hide");
+  $("standings").classList.remove("hide");
+  $("standHead").textContent = `Round ${round} of ${total}`;
+  $("standTitle").textContent = game === "draw" ? "🎨 A player is drawing…" : "Round in progress…";
+  $("podium").innerHTML = "";
+  $("standList").innerHTML = "";
+  $<HTMLButtonElement>("nextBtn").classList.add("hide");
+  $("standStatus").textContent = "Playing on the phones — hang tight.";
 }
 
 $<HTMLButtonElement>("nextBtn").onclick = () => {
@@ -256,6 +299,7 @@ $<HTMLButtonElement>("nextBtn").onclick = () => {
 
 // ---- standings ----
 function showStandings(sess: Session): void {
+  phase = "standings";
   $("lobby").classList.add("hide");
   $("standings").classList.remove("hide");
   const done = sess.round >= sess.total;

@@ -232,8 +232,12 @@ function finishBroadcast(): void {
   if (endFrameCache) renderFrame(endFrameCache);
   $("bcnStat").removeAttribute("hidden");
   $("bcnStat").textContent = "Beamed! ✏️";
-  // Party session: hand control back to the standings hub.
+  // Party session: the drawer earns from the guessers only — no free points.
+  // The clearer the drawing, the more people get it, the more the drawer scores.
   if (partySession) {
+    if (partyRole === "beacon" && partyRoom && correctGuesserIds.size > 0) {
+      addScore(partyRoom, correctGuesserIds.size * 250);
+    }
     void partyCh?.send({ type: "broadcast", event: "roundend", payload: {} });
     return;
   }
@@ -476,7 +480,7 @@ function lockIn(i: number, btn: HTMLButtonElement): void {
   answered = true;
   const buttons = [...$("opts").querySelectorAll("button")] as HTMLButtonElement[];
   for (const b of buttons) b.disabled = true;
-  if (partyRoom) partyReportAnswer();
+  if (partyRoom) partyReportAnswer(i === answerIndex);
   if (i === answerIndex) {
     btn.classList.add("correct");
     solved = true;
@@ -580,8 +584,9 @@ async function keepAwake(): Promise<void> {
 
 // ---------- party coordination (lazy realtime) ----------
 let partyCh: { send: (a: unknown) => unknown } | null = null;
-let partyReportAnswer: () => void = () => {};
+let partyReportAnswer: (correct: boolean) => void = () => {};
 let partyReportReady: () => void = () => {};
+const correctGuesserIds = new Set<string>(); // for drawer scoring
 let beaconBegun = false;
 let pendingBeam: { playlist: Uint8Array[]; metaFrame: Uint8Array } | null = null;
 let playerCount = 0;
@@ -696,7 +701,9 @@ async function setupParty(): Promise<void> {
       if (isDrawer) maybeBeginBeam();
     });
     ch.on("broadcast", { event: "answered" }, ({ payload }) => {
-      answeredIds.add((payload as { id: string }).id);
+      const a = payload as { id: string; correct?: boolean };
+      answeredIds.add(a.id);
+      if (a.correct) correctGuesserIds.add(a.id);
       check();
     });
     ch.on("broadcast", { event: "go" }, () => {
@@ -722,7 +729,8 @@ async function setupParty(): Promise<void> {
     ch.subscribe((s) => {
       if (s === "SUBSCRIBED") void trackMe();
     });
-    partyReportAnswer = () => void ch.send({ type: "broadcast", event: "answered", payload: { id } });
+    partyReportAnswer = (correct: boolean) =>
+      void ch.send({ type: "broadcast", event: "answered", payload: { id, correct } });
     partyReportReady = () => {
       readyFlag = true;
       void trackMe();
