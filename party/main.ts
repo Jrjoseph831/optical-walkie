@@ -23,6 +23,9 @@ let name = myName();
 let channel: RealtimeChannel | null = null;
 let roster: PlayerMeta[] = [];
 let phase: "lobby" | "progress" | "standings" = "lobby";
+let advancing = false; // guards against launching a round twice
+let standingsShownAt = 0; // settle window so everyone is back before auto-advance
+let update: (patch: Partial<PlayerMeta>) => void = () => {};
 
 // ---- session state (persisted so it survives the trip through a game page) ----
 interface Session { games: string[]; total: number; round: number; drawIdx: number; }
@@ -147,6 +150,7 @@ function connect(): void {
   const meta: Omit<PlayerMeta, "id"> = { name, host: isHost, score: getScore(code), ready: false, beacon: false };
   const r = joinRoom(code, meta, renderRoster);
   channel = r.channel;
+  update = r.update;
 
   // Host tells a fresh joiner what the session settings are (so late arrivals
   // fall into the next round correctly).
@@ -238,7 +242,38 @@ function renderRoster(players: PlayerMeta[]): void {
   }
   // keep the podium fresh if we're on the standings screen (but not while a
   // round is in progress, or we'd paint over the "drawing…" status)
-  if (phase === "standings") paintStandings(sorted);
+  if (phase === "standings") {
+    paintStandings(sorted);
+    updateReadyGate(players);
+  }
+}
+
+// Between rounds: players ready up on their own phones and the host device
+// auto-launches the next round — so nobody has to touch the host/beacon screen
+// (a tablet can just sit on the table).
+function updateReadyGate(players: PlayerMeta[]): void {
+  const sess = loadSession();
+  if (!sess || sess.round >= sess.total) return;
+  const others = players.filter((p) => !p.host);
+  const readyN = others.filter((p) => p.ready).length;
+  $("standStatus").textContent = others.length
+    ? `${readyN}/${others.length} ready for the next round`
+    : "Waiting for players to come back…";
+  if (!isHost || advancing || others.length === 0) return;
+  const elapsed = Date.now() - standingsShownAt;
+  // Settle window: wait a beat so every phone has navigated back and rejoined
+  // presence before we trust the ready count. Force-advance after a while so one
+  // AFK player can't stall the party (keeps the host screen hands-off).
+  const allReady = readyN >= others.length && elapsed > 4000;
+  const forced = elapsed > 45000;
+  if (allReady || forced) advanceRound();
+}
+
+function advanceRound(): void {
+  const sess = loadSession();
+  if (!sess || advancing) return;
+  advancing = true;
+  launchRound(sess, sess.round + 1);
 }
 
 // ---- start / advance the session ----
@@ -291,15 +326,26 @@ function showRoundInProgress(game: string, round: number, total: number): void {
   $("standStatus").textContent = "Playing on the phones — hang tight.";
 }
 
-$<HTMLButtonElement>("nextBtn").onclick = () => {
-  const sess = loadSession();
-  if (!sess) return;
-  launchRound(sess, sess.round + 1);
+// Host override: start the next round immediately without waiting on ready-up.
+$<HTMLButtonElement>("nextBtn").onclick = () => advanceRound();
+
+// Player: tap ready on your own phone; when everyone's ready the host auto-starts.
+$<HTMLButtonElement>("readyNextBtn").onclick = () => {
+  update({ ready: true });
+  const b = $<HTMLButtonElement>("readyNextBtn");
+  b.disabled = true;
+  b.textContent = "Ready ✓ — waiting for others";
 };
 
 // ---- standings ----
 function showStandings(sess: Session): void {
   phase = "standings";
+  advancing = false;
+  standingsShownAt = Date.now();
+  // Re-check when the settle window passes (in case everyone readied early) and
+  // again at the force-advance deadline (so an AFK player can't stall things).
+  window.setTimeout(() => phase === "standings" && updateReadyGate(roster), 4200);
+  window.setTimeout(() => phase === "standings" && updateReadyGate(roster), 45500);
   $("lobby").classList.add("hide");
   $("standings").classList.remove("hide");
   const done = sess.round >= sess.total;
@@ -307,23 +353,34 @@ function showStandings(sess: Session): void {
   $("standTitle").textContent = done ? "🏁 Game over" : `Round ${sess.round} of ${sess.total} · done`;
   paintStandings([...roster].sort((a, b) => b.score - a.score));
   const next = $<HTMLButtonElement>("nextBtn");
-  if (isHost) {
-    next.classList.remove("hide");
-    if (done) {
+  const readyNext = $<HTMLButtonElement>("readyNextBtn");
+  if (done) {
+    readyNext.classList.add("hide");
+    if (isHost) {
+      next.classList.remove("hide");
       next.textContent = "↻ New game";
-      next.onclick = () => {
-        channel?.send({ type: "broadcast", event: "newgame", payload: {} });
-      };
+      next.onclick = () => channel?.send({ type: "broadcast", event: "newgame", payload: {} });
       $("standStatus").textContent = "";
     } else {
-      next.textContent = "▶ Next round";
-      next.onclick = () => launchRound(sess, sess.round + 1);
-      $("standStatus").textContent = "";
+      next.classList.add("hide");
+      $("standStatus").textContent = "Thanks for playing!";
     }
+    return;
+  }
+  if (isHost) {
+    // Tablet on the table: it auto-advances when players ready up. The button is
+    // just an optional override.
+    readyNext.classList.add("hide");
+    next.classList.remove("hide");
+    next.textContent = "▶ Start next round now";
+    next.onclick = () => advanceRound();
   } else {
     next.classList.add("hide");
-    $("standStatus").textContent = done ? "Thanks for playing!" : "Waiting for the host to start the next round…";
+    readyNext.classList.remove("hide");
+    readyNext.disabled = false;
+    readyNext.textContent = "✓ Ready for next round";
   }
+  updateReadyGate(roster);
 }
 
 function paintStandings(all: PlayerMeta[]): void {

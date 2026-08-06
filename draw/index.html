@@ -62,6 +62,9 @@
   .prompt .word{font-size:30px;font-weight:900;margin:4px 0 2px;letter-spacing:-.01em;}
   .prompt .cat{font-size:11.5px;color:var(--faint);}
   .reshuffle{margin-top:10px;width:100%;padding:11px;border-radius:12px;border:2px solid var(--border);background:transparent;color:var(--dim);font-weight:800;font-size:13px;}
+  .drawnote{margin-top:14px;padding:12px 14px;border-radius:14px;font-size:12.5px;line-height:1.45;color:var(--text);
+    background:rgba(255,184,77,.12);border:1px solid rgba(255,184,77,.3);}
+  .drawnote b{color:var(--amber);}
 
   /* drawing pad */
   .padwrap{margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:10px;}
@@ -121,7 +124,7 @@
 
   /* immersive: casting */
   body.casting .brand,body.casting .hero,body.casting .roles,body.casting .foot,body.casting #playerCard,
-  body.casting .prompt,body.casting .padwrap,body.casting #drawTools,body.casting #beamBtn{display:none;}
+  body.casting .prompt,body.casting .padwrap,body.casting #drawTools,body.casting #beamBtn,body.casting #drawNote{display:none;}
   body.casting #beaconCard{position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:24px;box-shadow:none;
     background:radial-gradient(900px 540px at 50% -8%, rgba(255,184,77,.14), var(--bg) 62%);
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}
@@ -186,10 +189,11 @@
         <button id="clearPad">Clear</button>
       </div>
     </div>
-    <button id="beamBtn" class="btn primary">📡 Beam it to everyone</button>
+    <div class="drawnote" id="drawNote">📱 You're the drawer. When you beam, everyone points their phone at <b>your</b> screen to scan it — so hold it up for them.</div>
+    <button id="beamBtn" class="btn primary">📡 Beam it — everyone scans this phone</button>
     <div class="transmitter">
       <div class="tx-frame"><canvas id="bb" width="440" height="440"></canvas></div>
-      <div class="tx-caption">Guessers point their phones here</div>
+      <div class="tx-caption">📸 Everyone: point your phone at <b>this</b> screen</div>
     </div>
   </section>
 
